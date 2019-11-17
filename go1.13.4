@@ -57706,7 +57706,7 @@ index 0000000000..205d09a32b
 +#define SYS_NUM           13
 diff --git a/src/runtime/tasker_noos.go b/src/runtime/tasker_noos.go
 new file mode 100644
-index 0000000000..7fdf9ca026
+index 0000000000..6aed2767aa
 --- /dev/null
 +++ b/src/runtime/tasker_noos.go
 @@ -0,0 +1,545 @@
@@ -58187,7 +58187,7 @@ index 0000000000..7fdf9ca026
 +	nsec = t.timestart.nsec
 +	t.timestart.mx.unlock()
 +	now := t.nanotime()
-+	s := int64(now / 1e9)
++	s := now / 1e9
 +	ns := int32(now - s*1e9)
 +	sec += s
 +	nsec += ns
@@ -58203,7 +58203,7 @@ index 0000000000..7fdf9ca026
 +func syssetwalltime(sec int64, nsec int32) {
 +	t := getcpuctx().t
 +	now := t.nanotime()
-+	s := int64(now / 1e9)
++	s := now / 1e9
 +	ns := int32(now - s*1e9)
 +	sec -= s
 +	nsec -= ns
