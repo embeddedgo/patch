@@ -1,9 +1,10 @@
 diff --git a/api/go1embedded.txt b/api/go1embedded.txt
 new file mode 100644
-index 0000000000..0b3bbc39d3
+index 0000000000..f9c6fc5b5e
 --- /dev/null
 +++ b/api/go1embedded.txt
-@@ -0,0 +1,88 @@
+@@ -0,0 +1,89 @@
++pkg embedded/mmio, func MB()
 +pkg embedded/mmio, method (*U16) Addr() uintptr
 +pkg embedded/mmio, method (*U16) Bit(int) int
 +pkg embedded/mmio, method (*U16) Bits(uint16) uint16
@@ -962,10 +963,10 @@ index e46d937e42..1c07f4bf15 100644
  		c.RegSize = 8
 diff --git a/src/cmd/compile/internal/ssa/gen/Thumb.rules b/src/cmd/compile/internal/ssa/gen/Thumb.rules
 new file mode 100644
-index 0000000000..b7625f5613
+index 0000000000..122af53cc9
 --- /dev/null
 +++ b/src/cmd/compile/internal/ssa/gen/Thumb.rules
-@@ -0,0 +1,1265 @@
+@@ -0,0 +1,1343 @@
 +// Copyright 2016 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -1213,7 +1214,7 @@ index 0000000000..b7625f5613
 +(Store {t} ptr val mem) && t.(*types.Type).Size() == 4 && is32BitFloat(val.Type) -> (MOVFstore ptr val mem)
 +(Store {t} ptr val mem) && t.(*types.Type).Size() == 8 && is64BitFloat(val.Type) -> (MOVDstore ptr val mem)
 +
-+// mmio intrinsic
++// mmio intrinsics
 +(MMIOLoad8  ptr mem) -> (LoadOnce8 ptr mem)
 +(MMIOLoad16 ptr mem) -> (LoadOnce16 ptr mem)
 +(MMIOLoad32 ptr mem) -> (LoadOnce32 ptr mem)
@@ -1376,6 +1377,12 @@ index 0000000000..b7625f5613
 +(MOVFload [off1] {sym} (SUBconst [off2] ptr) mem) -> (MOVFload [off1-off2] {sym} ptr mem)
 +(MOVDload [off1] {sym} (ADDconst [off2] ptr) mem) -> (MOVDload [off1+off2] {sym} ptr mem)
 +(MOVDload [off1] {sym} (SUBconst [off2] ptr) mem) -> (MOVDload [off1-off2] {sym} ptr mem)
++(LoadOnce8 [off1] {sym} (ADDconst [off2] ptr) mem) -> (LoadOnce8 [off1+off2] {sym} ptr mem)
++(LoadOnce8 [off1] {sym} (SUBconst [off2] ptr) mem) -> (LoadOnce8 [off1-off2] {sym} ptr mem)
++(LoadOnce16 [off1] {sym} (ADDconst [off2] ptr) mem) -> (LoadOnce16 [off1+off2] {sym} ptr mem)
++(LoadOnce16 [off1] {sym} (SUBconst [off2] ptr) mem) -> (LoadOnce16 [off1-off2] {sym} ptr mem)
++(LoadOnce32 [off1] {sym} (ADDconst [off2] ptr) mem) -> (LoadOnce32 [off1+off2] {sym} ptr mem)
++(LoadOnce32 [off1] {sym} (SUBconst [off2] ptr) mem) -> (LoadOnce32 [off1-off2] {sym} ptr mem)
 +
 +(MOVBstore [off1] {sym} (ADDconst [off2] ptr) val mem) -> (MOVBstore [off1+off2] {sym} ptr val mem)
 +(MOVBstore [off1] {sym} (SUBconst [off2] ptr) val mem) -> (MOVBstore [off1-off2] {sym} ptr val mem)
@@ -1387,6 +1394,12 @@ index 0000000000..b7625f5613
 +(MOVFstore [off1] {sym} (SUBconst [off2] ptr) val mem) -> (MOVFstore [off1-off2] {sym} ptr val mem)
 +(MOVDstore [off1] {sym} (ADDconst [off2] ptr) val mem) -> (MOVDstore [off1+off2] {sym} ptr val mem)
 +(MOVDstore [off1] {sym} (SUBconst [off2] ptr) val mem) -> (MOVDstore [off1-off2] {sym} ptr val mem)
++(StoreOnce8 [off1] {sym} (ADDconst [off2] ptr) val mem) -> (StoreOnce8 [off1+off2] {sym} ptr val mem)
++(StoreOnce8 [off1] {sym} (SUBconst [off2] ptr) val mem) -> (StoreOnce8 [off1-off2] {sym} ptr val mem)
++(StoreOnce16 [off1] {sym} (ADDconst [off2] ptr) val mem) -> (StoreOnce16 [off1+off2] {sym} ptr val mem)
++(StoreOnce16 [off1] {sym} (SUBconst [off2] ptr) val mem) -> (StoreOnce16 [off1-off2] {sym} ptr val mem)
++(StoreOnce32 [off1] {sym} (ADDconst [off2] ptr) val mem) -> (StoreOnce32 [off1+off2] {sym} ptr val mem)
++(StoreOnce32 [off1] {sym} (SUBconst [off2] ptr) val mem) -> (StoreOnce32 [off1-off2] {sym} ptr val mem)
 +
 +(MOVBload [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) mem) && canMergeSym(sym1,sym2) ->
 +	(MOVBload [off1+off2] {mergeSym(sym1,sym2)} ptr mem)
@@ -1402,6 +1415,12 @@ index 0000000000..b7625f5613
 +	(MOVFload [off1+off2] {mergeSym(sym1,sym2)} ptr mem)
 +(MOVDload [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) mem) && canMergeSym(sym1,sym2) ->
 +	(MOVDload [off1+off2] {mergeSym(sym1,sym2)} ptr mem)
++(LoadOnce8 [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) mem) && canMergeSym(sym1,sym2) ->
++	(LoadOnce8 [off1+off2] {mergeSym(sym1,sym2)} ptr mem)
++(LoadOnce16 [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) mem) && canMergeSym(sym1,sym2) ->
++	(LoadOnce16 [off1+off2] {mergeSym(sym1,sym2)} ptr mem)
++(LoadOnce8 [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) mem) && canMergeSym(sym1,sym2) ->
++	(LoadOnce8 [off1+off2] {mergeSym(sym1,sym2)} ptr mem)
 +
 +(MOVBstore [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) val mem) && canMergeSym(sym1,sym2) ->
 +	(MOVBstore [off1+off2] {mergeSym(sym1,sym2)} ptr val mem)
@@ -1413,6 +1432,12 @@ index 0000000000..b7625f5613
 +	(MOVFstore [off1+off2] {mergeSym(sym1,sym2)} ptr val mem)
 +(MOVDstore [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) val mem) && canMergeSym(sym1,sym2) ->
 +	(MOVDstore [off1+off2] {mergeSym(sym1,sym2)} ptr val mem)
++(StoreOnce8 [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) val mem) && canMergeSym(sym1,sym2) ->
++	(StoreOnce8 [off1+off2] {mergeSym(sym1,sym2)} ptr val mem)
++(StoreOnce16 [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) val mem) && canMergeSym(sym1,sym2) ->
++	(StoreOnce16 [off1+off2] {mergeSym(sym1,sym2)} ptr val mem)
++(StoreOnce32 [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) val mem) && canMergeSym(sym1,sym2) ->
++	(StoreOnce32 [off1+off2] {mergeSym(sym1,sym2)} ptr val mem)
 +
 +// replace load from same location as preceding store with zero/sign extension (or copy in case of full width)
 +(MOVBload [off] {sym} ptr (MOVBstore [off2] {sym2} ptr2 x _)) && sym == sym2 && off == off2 && isSamePtr(ptr, ptr2) -> (MOVBreg x)
@@ -1989,40 +2014,94 @@ index 0000000000..b7625f5613
 +
 +// use indexed loads and stores
 +(MOVWload [0] {sym} (ADD ptr idx) mem) && sym == nil -> (MOVWloadidx ptr idx mem)
-+(MOVWstore [0] {sym} (ADD ptr idx) val mem) && sym == nil -> (MOVWstoreidx ptr idx val mem)
-+(MOVWload [0] {sym} (ADDshiftLL ptr idx [c]) mem) && sym == nil && c <= 3 -> (MOVWloadshiftLL ptr idx [c] mem)
-+(MOVWstore [0] {sym} (ADDshiftLL ptr idx [c]) val mem) && sym == nil && c <= 3 -> (MOVWstoreshiftLL ptr idx [c] val mem)
-+(MOVBUload [0] {sym} (ADD ptr idx) mem) && sym == nil -> (MOVBUloadidx ptr idx mem)
-+(MOVBload [0] {sym} (ADD ptr idx) mem) && sym == nil -> (MOVBloadidx ptr idx mem)
-+(MOVBstore [0] {sym} (ADD ptr idx) val mem) && sym == nil -> (MOVBstoreidx ptr idx val mem)
-+(MOVHUload [0] {sym} (ADD ptr idx) mem) && sym == nil -> (MOVHUloadidx ptr idx mem)
 +(MOVHload [0] {sym} (ADD ptr idx) mem) && sym == nil -> (MOVHloadidx ptr idx mem)
++(MOVHUload [0] {sym} (ADD ptr idx) mem) && sym == nil -> (MOVHUloadidx ptr idx mem)
++(MOVBload [0] {sym} (ADD ptr idx) mem) && sym == nil -> (MOVBloadidx ptr idx mem)
++(MOVBUload [0] {sym} (ADD ptr idx) mem) && sym == nil -> (MOVBUloadidx ptr idx mem)
++(LoadOnce8 [0] {sym} (ADD ptr idx) mem) && sym == nil -> (LoadOnce8idx ptr idx mem)
++(LoadOnce16 [0] {sym} (ADD ptr idx) mem) && sym == nil -> (LoadOnce16idx ptr idx mem)
++(LoadOnce32 [0] {sym} (ADD ptr idx) mem) && sym == nil -> (LoadOnce32idx ptr idx  mem)
++
++(MOVWstore [0] {sym} (ADD ptr idx) val mem) && sym == nil -> (MOVWstoreidx ptr idx val mem)
++(MOVBstore [0] {sym} (ADD ptr idx) val mem) && sym == nil -> (MOVBstoreidx ptr idx val mem)
 +(MOVHstore [0] {sym} (ADD ptr idx) val mem) && sym == nil -> (MOVHstoreidx ptr idx val mem)
++(StoreOnce8 [0] {sym} (ADD ptr idx) val mem) && sym == nil -> (StoreOnce8idx ptr idx val mem)
++(StoreOnce16 [0] {sym} (ADD ptr idx) val mem) && sym == nil -> (StoreOnce16idx ptr idx val mem)
++(StoreOnce32 [0] {sym} (ADD ptr idx) val mem) && sym == nil -> (StoreOnce32idx ptr idx val mem)
++
++(MOVWload [0] {sym} (ADDshiftLL ptr idx [c]) mem) && sym == nil && c <= 3 -> (MOVWloadshiftLL ptr idx [c] mem)
++(MOVHload [0] {sym} (ADDshiftLL ptr idx [c]) mem) && sym == nil && c <= 3 -> (MOVHloadshiftLL ptr idx [c] mem)
++(MOVHUload [0] {sym} (ADDshiftLL ptr idx [c]) mem) && sym == nil && c <= 3 -> (MOVHUloadshiftLL ptr idx [c] mem)
++(MOVBload [0] {sym} (ADDshiftLL ptr idx [c]) mem) && sym == nil && c <= 3 -> (MOVBloadshiftLL ptr idx [c] mem)
++(MOVBUload [0] {sym} (ADDshiftLL ptr idx [c]) mem) && sym == nil && c <= 3 -> (MOVBUloadshiftLL ptr idx [c] mem)
++(LoadOnce8 [0] {sym} (ADDshiftLL ptr idx [c]) mem) && sym == nil && c <= 3 -> (LoadOnce8shiftLL ptr idx [c] mem)
++(LoadOnce16 [0] {sym} (ADDshiftLL ptr idx [c]) mem) && sym == nil && c <= 3 -> (LoadOnce16shiftLL ptr idx [c] mem)
++(LoadOnce32 [0] {sym} (ADDshiftLL ptr idx [c]) mem) && sym == nil && c <= 3 -> (LoadOnce32shiftLL ptr idx [c] mem)
++
++(MOVWstore [0] {sym} (ADDshiftLL ptr idx [c]) val mem) && sym == nil && c <= 3 -> (MOVWstoreshiftLL ptr idx [c] val mem)
++(MOVHstore [0] {sym} (ADDshiftLL ptr idx [c]) val mem) && sym == nil && c <= 3 -> (MOVHstoreshiftLL ptr idx [c] val mem)
++(MOVBstore [0] {sym} (ADDshiftLL ptr idx [c]) val mem) && sym == nil && c <= 3 -> (MOVBstoreshiftLL ptr idx [c] val mem)
++(StoreOnce8 [0] {sym} (ADDshiftLL ptr idx [c]) val mem) && sym == nil && c <= 3 -> (StoreOnce8shiftLL ptr idx [c] val mem)
++(StoreOnce16 [0] {sym} (ADDshiftLL ptr idx [c]) val mem) && sym == nil && c <= 3 -> (StoreOnce16shiftLL ptr idx [c] val mem)
++(StoreOnce32 [0] {sym} (ADDshiftLL ptr idx [c]) val mem) && sym == nil && c <= 3 -> (StoreOnce32shiftLL ptr idx [c] val mem)
 +
 +// constant folding in indexed loads and stores
 +(MOVWloadidx ptr (MOVWconst [c]) mem) -> (MOVWload [c] ptr mem)
 +(MOVWloadidx (MOVWconst [c]) ptr mem) -> (MOVWload [c] ptr mem)
++(MOVHloadidx ptr (MOVWconst [c]) mem) -> (MOVHload [c] ptr mem)
++(MOVHloadidx (MOVWconst [c]) ptr mem) -> (MOVHload [c] ptr mem)
++(MOVHUloadidx ptr (MOVWconst [c]) mem) -> (MOVHUload [c] ptr mem)
++(MOVHUloadidx (MOVWconst [c]) ptr mem) -> (MOVHUload [c] ptr mem)
 +(MOVBloadidx ptr (MOVWconst [c]) mem) -> (MOVBload [c] ptr mem)
 +(MOVBloadidx (MOVWconst [c]) ptr mem) -> (MOVBload [c] ptr mem)
 +(MOVBUloadidx ptr (MOVWconst [c]) mem) -> (MOVBUload [c] ptr mem)
 +(MOVBUloadidx (MOVWconst [c]) ptr mem) -> (MOVBUload [c] ptr mem)
-+(MOVHUloadidx ptr (MOVWconst [c]) mem) -> (MOVHUload [c] ptr mem)
-+(MOVHUloadidx (MOVWconst [c]) ptr mem) -> (MOVHUload [c] ptr mem)
-+(MOVHloadidx ptr (MOVWconst [c]) mem) -> (MOVHload [c] ptr mem)
-+(MOVHloadidx (MOVWconst [c]) ptr mem) -> (MOVHload [c] ptr mem)
++(LoadOnce32idx ptr (MOVWconst [c]) mem) -> (LoadOnce32 [c] ptr mem)
++(LoadOnce32idx (MOVWconst [c]) ptr mem) -> (LoadOnce32 [c] ptr mem)
++(LoadOnce16idx ptr (MOVWconst [c]) mem) -> (LoadOnce16 [c] ptr mem)
++(LoadOnce16idx (MOVWconst [c]) ptr mem) -> (LoadOnce16 [c] ptr mem)
++(LoadOnce8idx ptr (MOVWconst [c]) mem) -> (LoadOnce8 [c] ptr mem)
++(LoadOnce8idx (MOVWconst [c]) ptr mem) -> (LoadOnce8 [c] ptr mem)
 +
 +(MOVWstoreidx ptr (MOVWconst [c]) val mem) -> (MOVWstore [c] ptr val mem)
 +(MOVWstoreidx (MOVWconst [c]) ptr val mem) -> (MOVWstore [c] ptr val mem)
-+(MOVBstoreidx ptr (MOVWconst [c]) val mem) -> (MOVBstore [c] ptr val mem)
-+(MOVBstoreidx (MOVWconst [c]) ptr val mem) -> (MOVBstore [c] ptr val mem)
 +(MOVHstoreidx ptr (MOVWconst [c]) val mem) -> (MOVHstore [c] ptr val mem)
 +(MOVHstoreidx (MOVWconst [c]) ptr val mem) -> (MOVHstore [c] ptr val mem)
++(MOVBstoreidx ptr (MOVWconst [c]) val mem) -> (MOVBstore [c] ptr val mem)
++(MOVBstoreidx (MOVWconst [c]) ptr val mem) -> (MOVBstore [c] ptr val mem)
++(StoreOnce32idx ptr (MOVWconst [c]) val mem) -> (StoreOnce32 [c] ptr val mem)
++(StoreOnce32idx (MOVWconst [c]) ptr val mem) -> (StoreOnce32 [c] ptr val mem)
++(StoreOnce16idx ptr (MOVWconst [c]) val mem) -> (StoreOnce16 [c] ptr val mem)
++(StoreOnce16idx (MOVWconst [c]) ptr val mem) -> (StoreOnce16 [c] ptr val mem)
++(StoreOnce8idx ptr (MOVWconst [c]) val mem) -> (StoreOnce8 [c] ptr val mem)
++(StoreOnce8idx (MOVWconst [c]) ptr val mem) -> (StoreOnce8 [c] ptr val mem)
 +
 +(MOVWloadidx ptr (SLLconst idx [c]) mem) && c <= 3 -> (MOVWloadshiftLL ptr idx [c] mem)
 +(MOVWloadidx (SLLconst idx [c]) ptr mem) && c <= 3 -> (MOVWloadshiftLL ptr idx [c] mem)
++(MOVHUloadidx ptr (SLLconst idx [c]) mem) && c <= 3 -> (MOVHUloadshiftLL ptr idx [c] mem)
++(MOVHUloadidx (SLLconst idx [c]) ptr mem) && c <= 3 -> (MOVHUloadshiftLL ptr idx [c] mem)
++(MOVHloadidx ptr (SLLconst idx [c]) mem) && c <= 3 -> (MOVHloadshiftLL ptr idx [c] mem)
++(MOVHloadidx (SLLconst idx [c]) ptr mem) && c <= 3 -> (MOVHloadshiftLL ptr idx [c] mem)
++(MOVBUloadidx ptr (SLLconst idx [c]) mem) && c <= 3 -> (MOVBUloadshiftLL ptr idx [c] mem)
++(MOVBUloadidx (SLLconst idx [c]) ptr mem) && c <= 3 -> (MOVBUloadshiftLL ptr idx [c] mem)
++(MOVBloadidx ptr (SLLconst idx [c]) mem) && c <= 3 -> (MOVBloadshiftLL ptr idx [c] mem)
++(MOVBloadidx (SLLconst idx [c]) ptr mem) && c <= 3 -> (MOVBloadshiftLL ptr idx [c] mem)
++(LoadOnce32idx ptr (SLLconst idx [c]) mem) && c <= 3 -> (LoadOnce32shiftLL ptr idx [c] mem)
++(LoadOnce16idx ptr (SLLconst idx [c]) mem) && c <= 3 -> (LoadOnce16shiftLL ptr idx [c] mem)
++(LoadOnce8idx ptr (SLLconst idx [c]) mem) && c <= 3 -> (LoadOnce8shiftLL ptr idx [c] mem)
 +
 +(MOVWstoreidx ptr (SLLconst idx [c]) val mem) && c <= 3 -> (MOVWstoreshiftLL ptr idx [c] val mem)
 +(MOVWstoreidx (SLLconst idx [c]) ptr val mem) && c <= 3 -> (MOVWstoreshiftLL ptr idx [c] val mem)
++(MOVHstoreidx ptr (SLLconst idx [c]) val mem) && c <= 3 -> (MOVHstoreshiftLL ptr idx [c] val mem)
++(MOVHstoreidx (SLLconst idx [c]) ptr val mem) && c <= 3 -> (MOVHstoreshiftLL ptr idx [c] val mem)
++(MOVBstoreidx ptr (SLLconst idx [c]) val mem) && c <= 3 -> (MOVBstoreshiftLL ptr idx [c] val mem)
++(MOVBstoreidx (SLLconst idx [c]) ptr val mem) && c <= 3 -> (MOVBstoreshiftLL ptr idx [c] val mem)
++(StoreOnce32idx ptr (SLLconst idx [c]) val mem) && c <= 3 -> (StoreOnce32shiftLL ptr idx [c] val mem)
++(StoreOnce32idx (SLLconst idx [c]) ptr val mem) && c <= 3 -> (StoreOnce32shiftLL ptr idx [c] val mem)
++(StoreOnce16idx ptr (SLLconst idx [c]) val mem) && c <= 3 -> (StoreOnce16shiftLL ptr idx [c] val mem)
++(StoreOnce16idx (SLLconst idx [c]) ptr val mem) && c <= 3 -> (StoreOnce16shiftLL ptr idx [c] val mem)
++(StoreOnce8idx ptr (SLLconst idx [c]) val mem) && c <= 3 -> (StoreOnce8shiftLL ptr idx [c] val mem)
++(StoreOnce8idx (SLLconst idx [c]) ptr val mem) && c <= 3 -> (StoreOnce8shiftLL ptr idx [c] val mem)
 +
 +(MOVWloadshiftLL ptr (MOVWconst [c]) [d] mem) -> (MOVWload [int64(uint32(c)<<uint64(d))] ptr mem)
 +
@@ -2233,10 +2312,10 @@ index 0000000000..b7625f5613
 +(MOVWload [off] {sym} (SB) _) && symIsRO(sym) -> (MOVWconst [int64(int32(read32(sym, off, config.BigEndian)))])
 diff --git a/src/cmd/compile/internal/ssa/gen/ThumbOps.go b/src/cmd/compile/internal/ssa/gen/ThumbOps.go
 new file mode 100644
-index 0000000000..6f60cf59cd
+index 0000000000..a48436e147
 --- /dev/null
 +++ b/src/cmd/compile/internal/ssa/gen/ThumbOps.go
-@@ -0,0 +1,532 @@
+@@ -0,0 +1,550 @@
 +// Copyright 2016 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -2553,17 +2632,23 @@ index 0000000000..6f60cf59cd
 +		{name: "MOVFstore", argLength: 3, reg: fpstore, aux: "SymOff", asm: "MOVF", typ: "Mem", faultOnNilArg0: true, symEffect: "Write"}, // store 4 bytes of arg1 to arg0 + auxInt + aux.  arg2=mem.
 +		{name: "MOVDstore", argLength: 3, reg: fpstore, aux: "SymOff", asm: "MOVD", typ: "Mem", faultOnNilArg0: true, symEffect: "Write"}, // store 8 bytes of arg1 to arg0 + auxInt + aux.  arg2=mem.
 +
-+		{name: "MOVWloadidx", argLength: 3, reg: gp2load, asm: "MOVW", typ: "UInt32"},                   // load from arg0 + arg1. arg2=mem
-+		{name: "MOVWloadshiftLL", argLength: 3, reg: gp2load, asm: "MOVW", aux: "Int32", typ: "UInt32"}, // load from arg0 + arg1<<auxInt. arg2=mem
-+		{name: "MOVBUloadidx", argLength: 3, reg: gp2load, asm: "MOVBU", typ: "UInt8"},                  // load from arg0 + arg1. arg2=mem
-+		{name: "MOVBloadidx", argLength: 3, reg: gp2load, asm: "MOVB", typ: "Int8"},                     // load from arg0 + arg1. arg2=mem
-+		{name: "MOVHUloadidx", argLength: 3, reg: gp2load, asm: "MOVHU", typ: "UInt16"},                 // load from arg0 + arg1. arg2=mem
-+		{name: "MOVHloadidx", argLength: 3, reg: gp2load, asm: "MOVH", typ: "Int16"},                    // load from arg0 + arg1. arg2=mem
++		{name: "MOVWloadidx", argLength: 3, reg: gp2load, asm: "MOVW", typ: "UInt32"},                     // load from arg0 + arg1. arg2=mem
++		{name: "MOVHloadidx", argLength: 3, reg: gp2load, asm: "MOVH", typ: "Int16"},                      // load from arg0 + arg1. arg2=mem
++		{name: "MOVHUloadidx", argLength: 3, reg: gp2load, asm: "MOVHU", typ: "UInt16"},                   // load from arg0 + arg1. arg2=mem
++		{name: "MOVBloadidx", argLength: 3, reg: gp2load, asm: "MOVB", typ: "Int8"},                       // load from arg0 + arg1. arg2=mem
++		{name: "MOVBUloadidx", argLength: 3, reg: gp2load, asm: "MOVBU", typ: "UInt8"},                    // load from arg0 + arg1. arg2=mem
++		{name: "MOVWloadshiftLL", argLength: 3, reg: gp2load, asm: "MOVW", aux: "Int32", typ: "UInt32"},   // load from arg0 + arg1<<auxInt. arg2=mem
++		{name: "MOVHloadshiftLL", argLength: 3, reg: gp2load, asm: "MOVH", aux: "Int32", typ: "Int16"},    // load from arg0 + arg1<<auxInt. arg2=mem
++		{name: "MOVHUloadshiftLL", argLength: 3, reg: gp2load, asm: "MOVHU", aux: "Int32", typ: "UInt16"}, // load from arg0 + arg1<<auxInt. arg2=mem
++		{name: "MOVBloadshiftLL", argLength: 3, reg: gp2load, asm: "MOVB", aux: "Int32", typ: "Int8"},     // load from arg0 + arg1<<auxInt. arg2=mem
++		{name: "MOVBUloadshiftLL", argLength: 3, reg: gp2load, asm: "MOVBU", aux: "Int32", typ: "UInt8"},  // load from arg0 + arg1<<auxInt. arg2=mem
 +
 +		{name: "MOVWstoreidx", argLength: 4, reg: gp2store, asm: "MOVW", typ: "Mem"},                   // store arg2 to arg0 + arg1. arg3=mem
-+		{name: "MOVWstoreshiftLL", argLength: 4, reg: gp2store, asm: "MOVW", aux: "Int32", typ: "Mem"}, // store arg2 to arg0 + arg1<<auxInt. arg3=mem
 +		{name: "MOVBstoreidx", argLength: 4, reg: gp2store, asm: "MOVB", typ: "Mem"},                   // store arg2 to arg0 + arg1. arg3=mem
 +		{name: "MOVHstoreidx", argLength: 4, reg: gp2store, asm: "MOVH", typ: "Mem"},                   // store arg2 to arg0 + arg1. arg3=mem
++		{name: "MOVWstoreshiftLL", argLength: 4, reg: gp2store, asm: "MOVW", aux: "Int32", typ: "Mem"}, // store arg2 to arg0 + arg1<<auxInt. arg3=mem
++		{name: "MOVHstoreshiftLL", argLength: 4, reg: gp2store, asm: "MOVH", aux: "Int32", typ: "Mem"}, // store arg2 to arg0 + arg1<<auxInt. arg3=mem
++		{name: "MOVBstoreshiftLL", argLength: 4, reg: gp2store, asm: "MOVB", aux: "Int32", typ: "Mem"}, // store arg2 to arg0 + arg1<<auxInt. arg3=mem
 +
 +		{name: "MOVBreg", argLength: 1, reg: gp11, asm: "MOVBS"},  // move from arg0, sign-extended from byte
 +		{name: "MOVBUreg", argLength: 1, reg: gp11, asm: "MOVBU"}, // move from arg0, unsign-extended from byte
@@ -2594,13 +2679,25 @@ index 0000000000..6f60cf59cd
 +		{name: "CALLclosure", argLength: 3, reg: regInfo{inputs: []regMask{gpsp, buildReg("R11"), 0}, clobbers: callerSave}, aux: "Int64", clobberFlags: true, call: true}, // call function via closure.  arg0=codeptr, arg1=closure, arg2=mem, auxint=argsize, returns mem
 +		{name: "CALLinter", argLength: 2, reg: regInfo{inputs: []regMask{gp}, clobbers: callerSave}, aux: "Int64", clobberFlags: true, call: true},                         // call fn by pointer.  arg0=codeptr, arg1=mem, auxint=argsize, returns mem
 +
-+		{name: "LoadOnce8", argLength: 2, reg: gpload, aux: "SymOff", asm: "MOVBU", typ: "(UInt8,Mem)", symEffect: "Read", hasSideEffects: true},
-+		{name: "LoadOnce16", argLength: 2, reg: gpload, aux: "SymOff", asm: "MOVHU", typ: "(UInt16,Mem)", symEffect: "Read", hasSideEffects: true},
-+		{name: "LoadOnce32", argLength: 2, reg: gpload, aux: "SymOff", asm: "MOVW", typ: "(UInt32,Mem)", symEffect: "Read", hasSideEffects: true},
-+		{name: "StoreOnce8", argLength: 3, reg: gpstore, aux: "SymOff", asm: "MOVB", typ: "Mem", symEffect: "Write", hasSideEffects: true},
-+		{name: "StoreOnce16", argLength: 3, reg: gpstore, aux: "SymOff", asm: "MOVH", typ: "Mem", symEffect: "Write", hasSideEffects: true},
-+		{name: "StoreOnce32", argLength: 3, reg: gpstore, aux: "SymOff", asm: "MOVW", typ: "Mem", symEffect: "Write", hasSideEffects: true},
++		{name: "LoadOnce8", argLength: 2, reg: gpload, aux: "SymOff", asm: "MOVBU", typ: "(UInt8,Mem)", symEffect: "Read", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "LoadOnce16", argLength: 2, reg: gpload, aux: "SymOff", asm: "MOVHU", typ: "(UInt16,Mem)", symEffect: "Read", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "LoadOnce32", argLength: 2, reg: gpload, aux: "SymOff", asm: "MOVW", typ: "(UInt32,Mem)", symEffect: "Read", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "StoreOnce8", argLength: 3, reg: gpstore, aux: "SymOff", asm: "MOVB", typ: "Mem", symEffect: "Write", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "StoreOnce16", argLength: 3, reg: gpstore, aux: "SymOff", asm: "MOVH", typ: "Mem", symEffect: "Write", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "StoreOnce32", argLength: 3, reg: gpstore, aux: "SymOff", asm: "MOVW", typ: "Mem", symEffect: "Write", hasSideEffects: true, faultOnNilArg0: true},
 +		{name: "DSB", argLength: 1, typ: "Mem", asm: "DSB", hasSideEffects: true},
++		{name: "LoadOnce8idx", argLength: 3, reg: gp2load, asm: "MOVB", typ: "(UInt8,Mem)", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "LoadOnce16idx", argLength: 3, reg: gp2load, asm: "MOVH", typ: "(UInt16,Mem)", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "LoadOnce32idx", argLength: 3, reg: gp2load, asm: "MOVW", typ: "(UInt32,Mem)", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "StoreOnce8idx", argLength: 4, reg: gp2store, asm: "MOVB", typ: "Mem", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "StoreOnce16idx", argLength: 4, reg: gp2store, asm: "MOVH", typ: "Mem", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "StoreOnce32idx", argLength: 4, reg: gp2store, asm: "MOVW", typ: "Mem", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "LoadOnce8shiftLL", argLength: 3, reg: gp2load, aux: "Int32", asm: "MOVB", typ: "(UInt8,Mem)", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "LoadOnce16shiftLL", argLength: 3, reg: gp2load, aux: "Int32", asm: "MOVH", typ: "(UInt16,Mem)", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "LoadOnce32shiftLL", argLength: 3, reg: gp2load, aux: "Int32", asm: "MOVW", typ: "(UInt32,Mem)", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "StoreOnce8shiftLL", argLength: 4, reg: gp2store, aux: "Int32", asm: "MOVB", typ: "Mem", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "StoreOnce16shiftLL", argLength: 4, reg: gp2store, aux: "Int32", asm: "MOVH", typ: "Mem", hasSideEffects: true, faultOnNilArg0: true},
++		{name: "StoreOnce32shiftLL", argLength: 4, reg: gp2store, aux: "Int32", asm: "MOVW", typ: "Mem", hasSideEffects: true, faultOnNilArg0: true},
 +
 +		// pseudo-ops
 +		{name: "LoweredNilCheck", argLength: 2, reg: regInfo{inputs: []regMask{gpg}}, nilCheck: true, faultOnNilArg0: true}, // panic if arg0 is nil.  arg1=mem.
@@ -2791,7 +2888,7 @@ index 8933aa51ef..ccba0d3f35 100644
  	{name: "Clobber", argLength: 0, typ: "Void", aux: "SymOff", symEffect: "None"}, // write an invalid pointer value to the given pointer slot of a stack variable
  }
 diff --git a/src/cmd/compile/internal/ssa/opGen.go b/src/cmd/compile/internal/ssa/opGen.go
-index 00e49c97b7..f4f0f54333 100644
+index 00e49c97b7..68c8e0fbdf 100644
 --- a/src/cmd/compile/internal/ssa/opGen.go
 +++ b/src/cmd/compile/internal/ssa/opGen.go
 @@ -9,6 +9,7 @@ import (
@@ -2838,7 +2935,7 @@ index 00e49c97b7..f4f0f54333 100644
  	BlockPlain:  "Plain",
  	BlockIf:     "If",
  	BlockDefer:  "Defer",
-@@ -2082,6 +2105,219 @@ const (
+@@ -2082,6 +2105,237 @@ const (
  	OpS390XLoweredMove
  	OpS390XLoweredZero
  
@@ -2985,15 +3082,21 @@ index 00e49c97b7..f4f0f54333 100644
 +	OpThumbMOVFstore
 +	OpThumbMOVDstore
 +	OpThumbMOVWloadidx
-+	OpThumbMOVWloadshiftLL
-+	OpThumbMOVBUloadidx
-+	OpThumbMOVBloadidx
-+	OpThumbMOVHUloadidx
 +	OpThumbMOVHloadidx
++	OpThumbMOVHUloadidx
++	OpThumbMOVBloadidx
++	OpThumbMOVBUloadidx
++	OpThumbMOVWloadshiftLL
++	OpThumbMOVHloadshiftLL
++	OpThumbMOVHUloadshiftLL
++	OpThumbMOVBloadshiftLL
++	OpThumbMOVBUloadshiftLL
 +	OpThumbMOVWstoreidx
-+	OpThumbMOVWstoreshiftLL
 +	OpThumbMOVBstoreidx
 +	OpThumbMOVHstoreidx
++	OpThumbMOVWstoreshiftLL
++	OpThumbMOVHstoreshiftLL
++	OpThumbMOVBstoreshiftLL
 +	OpThumbMOVBreg
 +	OpThumbMOVBUreg
 +	OpThumbMOVHreg
@@ -3023,6 +3126,18 @@ index 00e49c97b7..f4f0f54333 100644
 +	OpThumbStoreOnce16
 +	OpThumbStoreOnce32
 +	OpThumbDSB
++	OpThumbLoadOnce8idx
++	OpThumbLoadOnce16idx
++	OpThumbLoadOnce32idx
++	OpThumbStoreOnce8idx
++	OpThumbStoreOnce16idx
++	OpThumbStoreOnce32idx
++	OpThumbLoadOnce8shiftLL
++	OpThumbLoadOnce16shiftLL
++	OpThumbLoadOnce32shiftLL
++	OpThumbStoreOnce8shiftLL
++	OpThumbStoreOnce16shiftLL
++	OpThumbStoreOnce32shiftLL
 +	OpThumbLoweredNilCheck
 +	OpThumbEqual
 +	OpThumbNotEqual
@@ -3058,7 +3173,7 @@ index 00e49c97b7..f4f0f54333 100644
  	OpWasmLoweredStaticCall
  	OpWasmLoweredClosureCall
  	OpWasmLoweredInterCall
-@@ -2531,6 +2767,13 @@ const (
+@@ -2531,6 +2785,13 @@ const (
  	OpAtomicOr8
  	OpAtomicAdd32Variant
  	OpAtomicAdd64Variant
@@ -3072,527 +3187,880 @@ index 00e49c97b7..f4f0f54333 100644
  	OpClobber
  )
  
-@@ -28005,321 +28248,362 @@ var opcodeTable = [...]opInfo{
+@@ -27596,411 +27857,3555 @@ var opcodeTable = [...]opInfo{
+ 		},
  	},
- 
  	{
--		name:      "LoweredStaticCall",
--		auxType:   auxSymOff,
--		argLen:    1,
--		call:      true,
--		symEffect: SymNone,
+-		name:   "FlagEQ",
+-		argLen: 0,
+-		reg:    regInfo{},
+-	},
+-	{
+-		name:   "FlagLT",
+-		argLen: 0,
+-		reg:    regInfo{},
+-	},
+-	{
+-		name:   "FlagGT",
+-		argLen: 0,
+-		reg:    regInfo{},
+-	},
+-	{
+-		name:   "FlagOV",
+-		argLen: 0,
+-		reg:    regInfo{},
+-	},
+-	{
+-		name:   "SYNC",
+-		argLen: 1,
+-		asm:    s390x.ASYNC,
+-		reg:    regInfo{},
+-	},
+-	{
+-		name:           "MOVBZatomicload",
+-		auxType:        auxSymOff,
+-		argLen:         2,
+-		faultOnNilArg0: true,
+-		symEffect:      SymRead,
+-		asm:            s390x.AMOVBZ,
 -		reg: regInfo{
--			clobbers: 12884901887, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 g
+-			inputs: []inputInfo{
+-				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
+-			},
+-			outputs: []outputInfo{
+-				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
+-			},
 -		},
 -	},
 -	{
--		name:    "LoweredClosureCall",
--		auxType: auxInt64,
--		argLen:  3,
--		call:    true,
+-		name:           "MOVWZatomicload",
+-		auxType:        auxSymOff,
+-		argLen:         2,
+-		faultOnNilArg0: true,
+-		symEffect:      SymRead,
+-		asm:            s390x.AMOVWZ,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
+-			},
+-			outputs: []outputInfo{
+-				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
+-			},
+-		},
+-	},
+-	{
+-		name:           "MOVDatomicload",
+-		auxType:        auxSymOff,
+-		argLen:         2,
+-		faultOnNilArg0: true,
+-		symEffect:      SymRead,
+-		asm:            s390x.AMOVD,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
+-			},
+-			outputs: []outputInfo{
+-				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
+-			},
+-		},
+-	},
+-	{
+-		name:           "MOVWatomicstore",
+-		auxType:        auxSymOff,
+-		argLen:         3,
+-		clobberFlags:   true,
+-		faultOnNilArg0: true,
+-		hasSideEffects: true,
+-		symEffect:      SymWrite,
+-		asm:            s390x.AMOVW,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
+-				{1, 56319},      // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-		},
+-	},
+-	{
+-		name:           "MOVDatomicstore",
+-		auxType:        auxSymOff,
+-		argLen:         3,
+-		clobberFlags:   true,
+-		faultOnNilArg0: true,
+-		hasSideEffects: true,
+-		symEffect:      SymWrite,
+-		asm:            s390x.AMOVD,
++		name:   "FlagEQ",
++		argLen: 0,
++		reg:    regInfo{},
++	},
++	{
++		name:   "FlagLT",
++		argLen: 0,
++		reg:    regInfo{},
++	},
++	{
++		name:   "FlagGT",
++		argLen: 0,
++		reg:    regInfo{},
++	},
++	{
++		name:   "FlagOV",
++		argLen: 0,
++		reg:    regInfo{},
++	},
++	{
++		name:   "SYNC",
++		argLen: 1,
++		asm:    s390x.ASYNC,
++		reg:    regInfo{},
++	},
++	{
++		name:           "MOVBZatomicload",
++		auxType:        auxSymOff,
++		argLen:         2,
++		faultOnNilArg0: true,
++		symEffect:      SymRead,
++		asm:            s390x.AMOVBZ,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
++			},
++			outputs: []outputInfo{
++				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:           "MOVWZatomicload",
++		auxType:        auxSymOff,
++		argLen:         2,
++		faultOnNilArg0: true,
++		symEffect:      SymRead,
++		asm:            s390x.AMOVWZ,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
++			},
++			outputs: []outputInfo{
++				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:           "MOVDatomicload",
++		auxType:        auxSymOff,
++		argLen:         2,
++		faultOnNilArg0: true,
++		symEffect:      SymRead,
++		asm:            s390x.AMOVD,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
++			},
++			outputs: []outputInfo{
++				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:           "MOVWatomicstore",
++		auxType:        auxSymOff,
++		argLen:         3,
++		clobberFlags:   true,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		symEffect:      SymWrite,
++		asm:            s390x.AMOVW,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
++				{1, 56319},      // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++		},
++	},
++	{
++		name:           "MOVDatomicstore",
++		auxType:        auxSymOff,
++		argLen:         3,
++		clobberFlags:   true,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		symEffect:      SymWrite,
++		asm:            s390x.AMOVD,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
++				{1, 56319},      // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++		},
++	},
++	{
++		name:           "LAA",
++		auxType:        auxSymOff,
++		argLen:         3,
++		clobberFlags:   true,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		symEffect:      SymRdWr,
++		asm:            s390x.ALAA,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
++				{1, 56319},      // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++			outputs: []outputInfo{
++				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:           "LAAG",
++		auxType:        auxSymOff,
++		argLen:         3,
++		clobberFlags:   true,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		symEffect:      SymRdWr,
++		asm:            s390x.ALAAG,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
++				{1, 56319},      // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++			outputs: []outputInfo{
++				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:   "AddTupleFirst32",
++		argLen: 2,
++		reg:    regInfo{},
++	},
++	{
++		name:   "AddTupleFirst64",
++		argLen: 2,
++		reg:    regInfo{},
++	},
++	{
++		name:           "LoweredAtomicCas32",
++		auxType:        auxSymOff,
++		argLen:         4,
++		clobberFlags:   true,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		symEffect:      SymRdWr,
++		asm:            s390x.ACS,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 1},     // R0
++				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++				{2, 56319}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++			clobbers: 1, // R0
++			outputs: []outputInfo{
++				{1, 0},
++				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:           "LoweredAtomicCas64",
++		auxType:        auxSymOff,
++		argLen:         4,
++		clobberFlags:   true,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		symEffect:      SymRdWr,
++		asm:            s390x.ACSG,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 1},     // R0
++				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++				{2, 56319}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++			clobbers: 1, // R0
++			outputs: []outputInfo{
++				{1, 0},
++				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:           "LoweredAtomicExchange32",
++		auxType:        auxSymOff,
++		argLen:         3,
++		clobberFlags:   true,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		symEffect:      SymRdWr,
++		asm:            s390x.ACS,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++				{1, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++			outputs: []outputInfo{
++				{1, 0},
++				{0, 1}, // R0
++			},
++		},
++	},
++	{
++		name:           "LoweredAtomicExchange64",
++		auxType:        auxSymOff,
++		argLen:         3,
++		clobberFlags:   true,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		symEffect:      SymRdWr,
++		asm:            s390x.ACSG,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++				{1, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++			outputs: []outputInfo{
++				{1, 0},
++				{0, 1}, // R0
++			},
++		},
++	},
++	{
++		name:         "FLOGR",
++		argLen:       1,
++		clobberFlags: true,
++		asm:          s390x.AFLOGR,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
++			},
++			clobbers: 2, // R1
++			outputs: []outputInfo{
++				{0, 1}, // R0
++			},
++		},
++	},
++	{
++		name:         "POPCNT",
++		argLen:       1,
++		clobberFlags: true,
++		asm:          s390x.APOPCNT,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
++			},
++			outputs: []outputInfo{
++				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:   "SumBytes2",
++		argLen: 1,
++		reg:    regInfo{},
++	},
++	{
++		name:   "SumBytes4",
++		argLen: 1,
++		reg:    regInfo{},
++	},
++	{
++		name:   "SumBytes8",
++		argLen: 1,
++		reg:    regInfo{},
++	},
++	{
++		name:           "STMG2",
++		auxType:        auxSymOff,
++		argLen:         4,
++		faultOnNilArg0: true,
++		symEffect:      SymWrite,
++		asm:            s390x.ASTMG,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 2},     // R1
++				{2, 4},     // R2
++				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++		},
++	},
++	{
++		name:           "STMG3",
++		auxType:        auxSymOff,
++		argLen:         5,
++		faultOnNilArg0: true,
++		symEffect:      SymWrite,
++		asm:            s390x.ASTMG,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 2},     // R1
++				{2, 4},     // R2
++				{3, 8},     // R3
++				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++		},
++	},
++	{
++		name:           "STMG4",
++		auxType:        auxSymOff,
++		argLen:         6,
++		faultOnNilArg0: true,
++		symEffect:      SymWrite,
++		asm:            s390x.ASTMG,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 2},     // R1
++				{2, 4},     // R2
++				{3, 8},     // R3
++				{4, 16},    // R4
++				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++		},
++	},
++	{
++		name:           "STM2",
++		auxType:        auxSymOff,
++		argLen:         4,
++		faultOnNilArg0: true,
++		symEffect:      SymWrite,
++		asm:            s390x.ASTMY,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 2},     // R1
++				{2, 4},     // R2
++				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++		},
++	},
++	{
++		name:           "STM3",
++		auxType:        auxSymOff,
++		argLen:         5,
++		faultOnNilArg0: true,
++		symEffect:      SymWrite,
++		asm:            s390x.ASTMY,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 2},     // R1
++				{2, 4},     // R2
++				{3, 8},     // R3
++				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++		},
++	},
++	{
++		name:           "STM4",
++		auxType:        auxSymOff,
++		argLen:         6,
++		faultOnNilArg0: true,
++		symEffect:      SymWrite,
++		asm:            s390x.ASTMY,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 2},     // R1
++				{2, 4},     // R2
++				{3, 8},     // R3
++				{4, 16},    // R4
++				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++		},
++	},
++	{
++		name:           "LoweredMove",
++		auxType:        auxInt64,
++		argLen:         4,
++		clobberFlags:   true,
++		faultOnNilArg0: true,
++		faultOnNilArg1: true,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 2},     // R1
++				{1, 4},     // R2
++				{2, 56319}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++			clobbers: 6, // R1 R2
++		},
++	},
++	{
++		name:           "LoweredZero",
++		auxType:        auxInt64,
++		argLen:         3,
++		clobberFlags:   true,
++		faultOnNilArg0: true,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 2},     // R1
++				{1, 56319}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++			},
++			clobbers: 2, // R1
++		},
++	},
++
++	{
 +		name:         "ADD",
 +		argLen:       2,
 +		commutative:  true,
 +		clobberFlags: true,
 +		asm:          thumb.AADD,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
--				{1, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +				{1, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +			},
 +			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
--			clobbers: 12884901887, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 g
- 		},
- 	},
- 	{
--		name:    "LoweredInterCall",
--		auxType: auxInt64,
--		argLen:  2,
--		call:    true,
++			},
++		},
++	},
++	{
 +		name:         "ADDconst",
 +		auxType:      auxInt32,
 +		argLen:       1,
 +		clobberFlags: true,
 +		asm:          thumb.AADD,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 32639}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14
 +			},
 +			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
--			clobbers: 12884901887, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 g
- 		},
- 	},
- 	{
--		name:              "LoweredAddr",
--		auxType:           auxSymOff,
--		argLen:            1,
--		rematerializeable: true,
--		symEffect:         SymAddr,
++			},
++		},
++	},
++	{
 +		name:         "SUB",
 +		argLen:       2,
 +		clobberFlags: true,
 +		asm:          thumb.ASUB,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 4295032831}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +				{1, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
- 			},
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			},
++			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "LoweredMove",
--		auxType: auxInt64,
--		argLen:  3,
++			},
++		},
++	},
++	{
 +		name:         "SUBconst",
 +		auxType:      auxInt32,
 +		argLen:       1,
 +		clobberFlags: true,
 +		asm:          thumb.ASUB,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
--				{1, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +			},
 +			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "LoweredZero",
--		auxType: auxInt64,
--		argLen:  2,
++			},
++		},
++	},
++	{
 +		name:         "RSB",
 +		argLen:       2,
 +		clobberFlags: true,
 +		asm:          thumb.ARSB,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +				{1, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
- 			},
--		},
--	},
--	{
--		name:   "LoweredGetClosurePtr",
--		argLen: 0,
--		reg: regInfo{
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			},
++			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:              "LoweredGetCallerPC",
--		argLen:            0,
--		rematerializeable: true,
++			},
++		},
++	},
++	{
 +		name:         "RSBconst",
 +		auxType:      auxInt32,
 +		argLen:       1,
 +		clobberFlags: true,
 +		asm:          thumb.ARSB,
- 		reg: regInfo{
++		reg: regInfo{
 +			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +			},
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:              "LoweredGetCallerSP",
--		argLen:            0,
--		rematerializeable: true,
++			},
++		},
++	},
++	{
 +		name:         "MUL",
 +		argLen:       2,
 +		commutative:  true,
 +		clobberFlags: true,
 +		asm:          thumb.AMUL,
- 		reg: regInfo{
++		reg: regInfo{
 +			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +				{1, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +			},
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:           "LoweredNilCheck",
--		argLen:         2,
--		nilCheck:       true,
--		faultOnNilArg0: true,
++			},
++		},
++	},
++	{
 +		name:        "HMUL",
 +		argLen:      2,
 +		commutative: true,
 +		asm:         thumb.AMULL,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +				{1, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +			},
 +			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:      "LoweredWB",
--		auxType:   auxSym,
--		argLen:    3,
--		symEffect: SymNone,
++			},
++		},
++	},
++	{
 +		name:        "HMULU",
 +		argLen:      2,
 +		commutative: true,
 +		asm:         thumb.AMULLU,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
--				{1, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +				{1, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +			},
 +			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:   "LoweredRound32F",
--		argLen: 1,
++			},
++		},
++	},
++	{
 +		name:   "DIV",
 +		argLen: 2,
 +		asm:    thumb.ADIV,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 4294901760}, // F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +				{1, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
- 			},
- 			outputs: []outputInfo{
--				{0, 4294901760}, // F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15
++			},
++			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:   "LoweredConvert",
++			},
++		},
++	},
++	{
 +		name:   "DIVU",
- 		argLen: 2,
++		argLen: 2,
 +		asm:    thumb.ADIVU,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +				{1, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
- 			},
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			},
++			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:   "Select",
--		argLen: 3,
--		asm:    wasm.ASelect,
++			},
++		},
++	},
++	{
 +		name:        "ADDS",
 +		argLen:      2,
 +		commutative: true,
 +		asm:         thumb.AADD,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 4295032831}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
--				{1, 4295032831}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
--				{2, 4295032831}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +				{1, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
- 			},
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			},
++			outputs: []outputInfo{
 +				{1, 0},
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "I64Load8U",
--		auxType: auxInt64,
--		argLen:  2,
--		asm:     wasm.AI64Load8U,
++			},
++		},
++	},
++	{
 +		name:    "ADDSconst",
 +		auxType: auxInt32,
 +		argLen:  1,
 +		asm:     thumb.AADD,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
- 			},
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			},
++			outputs: []outputInfo{
 +				{1, 0},
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "I64Load8S",
--		auxType: auxInt64,
--		argLen:  2,
--		asm:     wasm.AI64Load8S,
++			},
++		},
++	},
++	{
 +		name:         "ADC",
 +		argLen:       3,
 +		commutative:  true,
 +		clobberFlags: true,
 +		asm:          thumb.AADC,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
 +				{1, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			},
++			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "I64Load16U",
--		auxType: auxInt64,
--		argLen:  2,
--		asm:     wasm.AI64Load16U,
++			},
++		},
++	},
++	{
 +		name:         "ADCconst",
 +		auxType:      auxInt32,
 +		argLen:       2,
 +		clobberFlags: true,
 +		asm:          thumb.AADC,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			},
++			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "I64Load16S",
--		auxType: auxInt64,
--		argLen:  2,
--		asm:     wasm.AI64Load16S,
++			},
++		},
++	},
++	{
 +		name:   "SUBS",
 +		argLen: 2,
 +		asm:    thumb.ASUB,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +				{1, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
- 			},
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			},
++			outputs: []outputInfo{
 +				{1, 0},
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "I64Load32U",
--		auxType: auxInt64,
--		argLen:  2,
--		asm:     wasm.AI64Load32U,
++			},
++		},
++	},
++	{
 +		name:    "SUBSconst",
 +		auxType: auxInt32,
 +		argLen:  1,
 +		asm:     thumb.ASUB,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
- 			},
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			},
++			outputs: []outputInfo{
 +				{1, 0},
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "I64Load32S",
--		auxType: auxInt64,
--		argLen:  2,
--		asm:     wasm.AI64Load32S,
++			},
++		},
++	},
++	{
 +		name:    "RSBSconst",
 +		auxType: auxInt32,
 +		argLen:  1,
 +		asm:     thumb.ARSB,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
- 			},
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			},
++			outputs: []outputInfo{
 +				{1, 0},
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "I64Load",
--		auxType: auxInt64,
--		argLen:  2,
--		asm:     wasm.AI64Load,
++			},
++		},
++	},
++	{
 +		name:         "SBC",
 +		argLen:       3,
 +		clobberFlags: true,
 +		asm:          thumb.ASBC,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
 +				{1, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 			outputs: []outputInfo{
--				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
++			},
++			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "I64Store8",
--		auxType: auxInt64,
--		argLen:  3,
--		asm:     wasm.AI64Store8,
++			},
++		},
++	},
++	{
 +		name:         "SBCconst",
 +		auxType:      auxInt32,
 +		argLen:       2,
 +		clobberFlags: true,
 +		asm:          thumb.ASBC,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{1, 4295032831},  // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
--				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
 +			},
 +			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "I64Store16",
--		auxType: auxInt64,
--		argLen:  3,
--		asm:     wasm.AI64Store16,
++			},
++		},
++	},
++	{
 +		name:        "MULLU",
 +		argLen:      2,
 +		commutative: true,
 +		asm:         thumb.AMULLU,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{1, 4295032831},  // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
--				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +				{1, 24447}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
 +			},
 +			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
 +				{1, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "I64Store32",
--		auxType: auxInt64,
--		argLen:  3,
--		asm:     wasm.AI64Store32,
++			},
++		},
++	},
++	{
 +		name:   "MULA",
 +		argLen: 3,
 +		asm:    thumb.AMULA,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{1, 4295032831},  // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
--				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
 +				{1, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
 +				{2, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
 +			},
 +			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "I64Store",
--		auxType: auxInt64,
--		argLen:  3,
--		asm:     wasm.AI64Store,
++			},
++		},
++	},
++	{
 +		name:   "MULS",
 +		argLen: 3,
 +		asm:    thumb.AMULS,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{1, 4295032831},  // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
--				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
 +				{1, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
 +				{2, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
 +			},
 +			outputs: []outputInfo{
 +				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
- 			},
- 		},
- 	},
- 	{
--		name:    "F32Load",
--		auxType: auxInt64,
--		argLen:  2,
--		asm:     wasm.AF32Load,
++			},
++		},
++	},
++	{
 +		name:        "ADDF",
 +		argLen:      2,
 +		commutative: true,
 +		asm:         thumb.AADDF,
- 		reg: regInfo{
- 			inputs: []inputInfo{
--				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
++		reg: regInfo{
++			inputs: []inputInfo{
 +				{0, 4294901760}, // F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15
 +				{1, 4294901760}, // F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15
- 			},
- 			outputs: []outputInfo{
- 				{0, 4294901760}, // F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15
-@@ -28327,10 +28611,2835 @@ var opcodeTable = [...]opInfo{
- 		},
- 	},
- 	{
--		name:    "F64Load",
--		auxType: auxInt64,
--		argLen:  2,
--		asm:     wasm.AF64Load,
++			},
++			outputs: []outputInfo{
++				{0, 4294901760}, // F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15
++			},
++		},
++	},
++	{
 +		name:        "ADDD",
 +		argLen:      2,
 +		commutative: true,
@@ -5278,38 +5746,9 @@ index 00e49c97b7..f4f0f54333 100644
 +		},
 +	},
 +	{
-+		name:    "MOVWloadshiftLL",
-+		auxType: auxInt32,
-+		argLen:  3,
-+		asm:     thumb.AMOVW,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
-+				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
-+			},
-+			outputs: []outputInfo{
-+				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
-+			},
-+		},
-+	},
-+	{
-+		name:   "MOVBUloadidx",
++		name:   "MOVHloadidx",
 +		argLen: 3,
-+		asm:    thumb.AMOVBU,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
-+				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
-+			},
-+			outputs: []outputInfo{
-+				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
-+			},
-+		},
-+	},
-+	{
-+		name:   "MOVBloadidx",
-+		argLen: 3,
-+		asm:    thumb.AMOVB,
++		asm:    thumb.AMOVH,
 +		reg: regInfo{
 +			inputs: []inputInfo{
 +				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
@@ -5335,9 +5774,98 @@ index 00e49c97b7..f4f0f54333 100644
 +		},
 +	},
 +	{
-+		name:   "MOVHloadidx",
++		name:   "MOVBloadidx",
 +		argLen: 3,
-+		asm:    thumb.AMOVH,
++		asm:    thumb.AMOVB,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++			outputs: []outputInfo{
++				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:   "MOVBUloadidx",
++		argLen: 3,
++		asm:    thumb.AMOVBU,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++			outputs: []outputInfo{
++				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:    "MOVWloadshiftLL",
++		auxType: auxInt32,
++		argLen:  3,
++		asm:     thumb.AMOVW,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++			outputs: []outputInfo{
++				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:    "MOVHloadshiftLL",
++		auxType: auxInt32,
++		argLen:  3,
++		asm:     thumb.AMOVH,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++			outputs: []outputInfo{
++				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:    "MOVHUloadshiftLL",
++		auxType: auxInt32,
++		argLen:  3,
++		asm:     thumb.AMOVHU,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++			outputs: []outputInfo{
++				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:    "MOVBloadshiftLL",
++		auxType: auxInt32,
++		argLen:  3,
++		asm:     thumb.AMOVB,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++			outputs: []outputInfo{
++				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:    "MOVBUloadshiftLL",
++		auxType: auxInt32,
++		argLen:  3,
++		asm:     thumb.AMOVBU,
 +		reg: regInfo{
 +			inputs: []inputInfo{
 +				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
@@ -5352,19 +5880,6 @@ index 00e49c97b7..f4f0f54333 100644
 +		name:   "MOVWstoreidx",
 +		argLen: 4,
 +		asm:    thumb.AMOVW,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
-+				{2, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
-+				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
-+			},
-+		},
-+	},
-+	{
-+		name:    "MOVWstoreshiftLL",
-+		auxType: auxInt32,
-+		argLen:  4,
-+		asm:     thumb.AMOVW,
 +		reg: regInfo{
 +			inputs: []inputInfo{
 +				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
@@ -5389,6 +5904,45 @@ index 00e49c97b7..f4f0f54333 100644
 +		name:   "MOVHstoreidx",
 +		argLen: 4,
 +		asm:    thumb.AMOVH,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{2, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++		},
++	},
++	{
++		name:    "MOVWstoreshiftLL",
++		auxType: auxInt32,
++		argLen:  4,
++		asm:     thumb.AMOVW,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{2, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++		},
++	},
++	{
++		name:    "MOVHstoreshiftLL",
++		auxType: auxInt32,
++		argLen:  4,
++		asm:     thumb.AMOVH,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{2, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++		},
++	},
++	{
++		name:    "MOVBstoreshiftLL",
++		auxType: auxInt32,
++		argLen:  4,
++		asm:     thumb.AMOVB,
 +		reg: regInfo{
 +			inputs: []inputInfo{
 +				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
@@ -5699,6 +6253,7 @@ index 00e49c97b7..f4f0f54333 100644
 +		name:           "LoadOnce8",
 +		auxType:        auxSymOff,
 +		argLen:         2,
++		faultOnNilArg0: true,
 +		hasSideEffects: true,
 +		symEffect:      SymRead,
 +		asm:            thumb.AMOVBU,
@@ -5715,6 +6270,7 @@ index 00e49c97b7..f4f0f54333 100644
 +		name:           "LoadOnce16",
 +		auxType:        auxSymOff,
 +		argLen:         2,
++		faultOnNilArg0: true,
 +		hasSideEffects: true,
 +		symEffect:      SymRead,
 +		asm:            thumb.AMOVHU,
@@ -5731,6 +6287,7 @@ index 00e49c97b7..f4f0f54333 100644
 +		name:           "LoadOnce32",
 +		auxType:        auxSymOff,
 +		argLen:         2,
++		faultOnNilArg0: true,
 +		hasSideEffects: true,
 +		symEffect:      SymRead,
 +		asm:            thumb.AMOVW,
@@ -5747,6 +6304,7 @@ index 00e49c97b7..f4f0f54333 100644
 +		name:           "StoreOnce8",
 +		auxType:        auxSymOff,
 +		argLen:         3,
++		faultOnNilArg0: true,
 +		hasSideEffects: true,
 +		symEffect:      SymWrite,
 +		asm:            thumb.AMOVB,
@@ -5761,6 +6319,7 @@ index 00e49c97b7..f4f0f54333 100644
 +		name:           "StoreOnce16",
 +		auxType:        auxSymOff,
 +		argLen:         3,
++		faultOnNilArg0: true,
 +		hasSideEffects: true,
 +		symEffect:      SymWrite,
 +		asm:            thumb.AMOVH,
@@ -5775,6 +6334,7 @@ index 00e49c97b7..f4f0f54333 100644
 +		name:           "StoreOnce32",
 +		auxType:        auxSymOff,
 +		argLen:         3,
++		faultOnNilArg0: true,
 +		hasSideEffects: true,
 +		symEffect:      SymWrite,
 +		asm:            thumb.AMOVW,
@@ -5791,6 +6351,192 @@ index 00e49c97b7..f4f0f54333 100644
 +		hasSideEffects: true,
 +		asm:            thumb.ADSB,
 +		reg:            regInfo{},
++	},
++	{
++		name:           "LoadOnce8idx",
++		argLen:         3,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		asm:            thumb.AMOVB,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++			outputs: []outputInfo{
++				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:           "LoadOnce16idx",
++		argLen:         3,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		asm:            thumb.AMOVH,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++			outputs: []outputInfo{
++				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:           "LoadOnce32idx",
++		argLen:         3,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		asm:            thumb.AMOVW,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++			outputs: []outputInfo{
++				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:           "StoreOnce8idx",
++		argLen:         4,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		asm:            thumb.AMOVB,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{2, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++		},
++	},
++	{
++		name:           "StoreOnce16idx",
++		argLen:         4,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		asm:            thumb.AMOVH,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{2, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++		},
++	},
++	{
++		name:           "StoreOnce32idx",
++		argLen:         4,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		asm:            thumb.AMOVW,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{2, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++		},
++	},
++	{
++		name:           "LoadOnce8shiftLL",
++		auxType:        auxInt32,
++		argLen:         3,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		asm:            thumb.AMOVB,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++			outputs: []outputInfo{
++				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:           "LoadOnce16shiftLL",
++		auxType:        auxInt32,
++		argLen:         3,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		asm:            thumb.AMOVH,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++			outputs: []outputInfo{
++				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:           "LoadOnce32shiftLL",
++		auxType:        auxInt32,
++		argLen:         3,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		asm:            thumb.AMOVW,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++			outputs: []outputInfo{
++				{0, 23423}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 R11 R12 R14
++			},
++		},
++	},
++	{
++		name:           "StoreOnce8shiftLL",
++		auxType:        auxInt32,
++		argLen:         4,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		asm:            thumb.AMOVB,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{2, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++		},
++	},
++	{
++		name:           "StoreOnce16shiftLL",
++		auxType:        auxInt32,
++		argLen:         4,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		asm:            thumb.AMOVH,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{2, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++		},
++	},
++	{
++		name:           "StoreOnce32shiftLL",
++		auxType:        auxInt32,
++		argLen:         4,
++		faultOnNilArg0: true,
++		hasSideEffects: true,
++		asm:            thumb.AMOVW,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{1, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{2, 24447},      // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 R14
++				{0, 4294999935}, // R0 R1 R2 R3 R4 R5 R6 R8 R9 g R11 R12 SP R14 SB
++			},
++		},
 +	},
 +	{
 +		name:           "LoweredNilCheck",
@@ -6018,414 +6764,352 @@ index 00e49c97b7..f4f0f54333 100644
 +		name:    "LoweredPanicExtendA",
 +		auxType: auxInt64,
 +		argLen:  4,
-+		reg: regInfo{
-+			inputs: []inputInfo{
+ 		reg: regInfo{
+ 			inputs: []inputInfo{
+-				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
+-				{1, 56319},      // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
 +				{0, 16}, // R4
 +				{1, 4},  // R2
 +				{2, 8},  // R3
-+			},
-+		},
-+	},
-+	{
+ 			},
+ 		},
+ 	},
+ 	{
+-		name:           "LAA",
+-		auxType:        auxSymOff,
+-		argLen:         3,
+-		clobberFlags:   true,
+-		faultOnNilArg0: true,
+-		hasSideEffects: true,
+-		symEffect:      SymRdWr,
+-		asm:            s390x.ALAA,
 +		name:    "LoweredPanicExtendB",
 +		auxType: auxInt64,
 +		argLen:  4,
-+		reg: regInfo{
-+			inputs: []inputInfo{
+ 		reg: regInfo{
+ 			inputs: []inputInfo{
+-				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
+-				{1, 56319},      // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-			outputs: []outputInfo{
+-				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
 +				{0, 16}, // R4
 +				{1, 2},  // R1
 +				{2, 4},  // R2
-+			},
-+		},
-+	},
-+	{
+ 			},
+ 		},
+ 	},
+ 	{
+-		name:           "LAAG",
+-		auxType:        auxSymOff,
+-		argLen:         3,
+-		clobberFlags:   true,
+-		faultOnNilArg0: true,
+-		hasSideEffects: true,
+-		symEffect:      SymRdWr,
+-		asm:            s390x.ALAAG,
 +		name:    "LoweredPanicExtendC",
 +		auxType: auxInt64,
 +		argLen:  4,
-+		reg: regInfo{
-+			inputs: []inputInfo{
+ 		reg: regInfo{
+ 			inputs: []inputInfo{
+-				{0, 4295023614}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP SB
+-				{1, 56319},      // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-			outputs: []outputInfo{
+-				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
 +				{0, 16}, // R4
 +				{1, 1},  // R0
 +				{2, 2},  // R1
-+			},
-+		},
-+	},
-+	{
+ 			},
+ 		},
+ 	},
+ 	{
+-		name:   "AddTupleFirst32",
+-		argLen: 2,
 +		name:   "FlagEQ",
 +		argLen: 0,
-+		reg:    regInfo{},
-+	},
-+	{
+ 		reg:    regInfo{},
+ 	},
+ 	{
+-		name:   "AddTupleFirst64",
+-		argLen: 2,
 +		name:   "FlagLT_ULT",
 +		argLen: 0,
-+		reg:    regInfo{},
-+	},
-+	{
+ 		reg:    regInfo{},
+ 	},
+ 	{
+-		name:           "LoweredAtomicCas32",
+-		auxType:        auxSymOff,
+-		argLen:         4,
+-		clobberFlags:   true,
+-		faultOnNilArg0: true,
+-		hasSideEffects: true,
+-		symEffect:      SymRdWr,
+-		asm:            s390x.ACS,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{1, 1},     // R0
+-				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-				{2, 56319}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-			clobbers: 1, // R0
+-			outputs: []outputInfo{
+-				{1, 0},
+-				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
+-			},
+-		},
+-	},
+-	{
+-		name:           "LoweredAtomicCas64",
+-		auxType:        auxSymOff,
+-		argLen:         4,
+-		clobberFlags:   true,
+-		faultOnNilArg0: true,
+-		hasSideEffects: true,
+-		symEffect:      SymRdWr,
+-		asm:            s390x.ACSG,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{1, 1},     // R0
+-				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-				{2, 56319}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-			clobbers: 1, // R0
+-			outputs: []outputInfo{
+-				{1, 0},
+-				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
+-			},
+-		},
+-	},
+-	{
+-		name:           "LoweredAtomicExchange32",
+-		auxType:        auxSymOff,
+-		argLen:         3,
+-		clobberFlags:   true,
+-		faultOnNilArg0: true,
+-		hasSideEffects: true,
+-		symEffect:      SymRdWr,
+-		asm:            s390x.ACS,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-				{1, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-			outputs: []outputInfo{
+-				{1, 0},
+-				{0, 1}, // R0
+-			},
+-		},
+-	},
+-	{
+-		name:           "LoweredAtomicExchange64",
+-		auxType:        auxSymOff,
+-		argLen:         3,
+-		clobberFlags:   true,
+-		faultOnNilArg0: true,
+-		hasSideEffects: true,
+-		symEffect:      SymRdWr,
+-		asm:            s390x.ACSG,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-				{1, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-			outputs: []outputInfo{
+-				{1, 0},
+-				{0, 1}, // R0
+-			},
+-		},
+-	},
+-	{
+-		name:         "FLOGR",
+-		argLen:       1,
+-		clobberFlags: true,
+-		asm:          s390x.AFLOGR,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
+-			},
+-			clobbers: 2, // R1
+-			outputs: []outputInfo{
+-				{0, 1}, // R0
+-			},
+-		},
+-	},
+-	{
+-		name:         "POPCNT",
+-		argLen:       1,
+-		clobberFlags: true,
+-		asm:          s390x.APOPCNT,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
+-			},
+-			outputs: []outputInfo{
+-				{0, 23551}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14
+-			},
+-		},
 +		name:   "FlagLT_UGT",
 +		argLen: 0,
 +		reg:    regInfo{},
-+	},
-+	{
+ 	},
+ 	{
+-		name:   "SumBytes2",
+-		argLen: 1,
 +		name:   "FlagGT_UGT",
 +		argLen: 0,
-+		reg:    regInfo{},
-+	},
-+	{
+ 		reg:    regInfo{},
+ 	},
+ 	{
+-		name:   "SumBytes4",
+-		argLen: 1,
 +		name:   "FlagGT_ULT",
 +		argLen: 0,
-+		reg:    regInfo{},
-+	},
-+	{
+ 		reg:    regInfo{},
+ 	},
+ 	{
+-		name:   "SumBytes8",
 +		name:   "InvertFlags",
-+		argLen: 1,
-+		reg:    regInfo{},
-+	},
-+	{
+ 		argLen: 1,
+ 		reg:    regInfo{},
+ 	},
+ 	{
+-		name:           "STMG2",
+-		auxType:        auxSymOff,
+-		argLen:         4,
+-		faultOnNilArg0: true,
+-		symEffect:      SymWrite,
+-		asm:            s390x.ASTMG,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{1, 2},     // R1
+-				{2, 4},     // R2
+-				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-		},
+-	},
+-	{
+-		name:           "STMG3",
+-		auxType:        auxSymOff,
+-		argLen:         5,
+-		faultOnNilArg0: true,
+-		symEffect:      SymWrite,
+-		asm:            s390x.ASTMG,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{1, 2},     // R1
+-				{2, 4},     // R2
+-				{3, 8},     // R3
+-				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-		},
+-	},
+-	{
+-		name:           "STMG4",
+-		auxType:        auxSymOff,
+-		argLen:         6,
+-		faultOnNilArg0: true,
+-		symEffect:      SymWrite,
+-		asm:            s390x.ASTMG,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{1, 2},     // R1
+-				{2, 4},     // R2
+-				{3, 8},     // R3
+-				{4, 16},    // R4
+-				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-		},
+-	},
+-	{
+-		name:           "STM2",
+-		auxType:        auxSymOff,
+-		argLen:         4,
+-		faultOnNilArg0: true,
+-		symEffect:      SymWrite,
+-		asm:            s390x.ASTMY,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{1, 2},     // R1
+-				{2, 4},     // R2
+-				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-		},
+-	},
+-	{
+-		name:           "STM3",
+-		auxType:        auxSymOff,
+-		argLen:         5,
+-		faultOnNilArg0: true,
+-		symEffect:      SymWrite,
+-		asm:            s390x.ASTMY,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{1, 2},     // R1
+-				{2, 4},     // R2
+-				{3, 8},     // R3
+-				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-		},
+-	},
+-	{
+-		name:           "STM4",
+-		auxType:        auxSymOff,
+-		argLen:         6,
+-		faultOnNilArg0: true,
+-		symEffect:      SymWrite,
+-		asm:            s390x.ASTMY,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{1, 2},     // R1
+-				{2, 4},     // R2
+-				{3, 8},     // R3
+-				{4, 16},    // R4
+-				{0, 56318}, // R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-		},
+-	},
+-	{
+-		name:           "LoweredMove",
+-		auxType:        auxInt64,
+-		argLen:         4,
+-		clobberFlags:   true,
+-		faultOnNilArg0: true,
+-		faultOnNilArg1: true,
+-		reg: regInfo{
+-			inputs: []inputInfo{
+-				{0, 2},     // R1
+-				{1, 4},     // R2
+-				{2, 56319}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
+-			},
+-			clobbers: 6, // R1 R2
+-		},
+-	},
+-	{
+-		name:           "LoweredZero",
+-		auxType:        auxInt64,
+-		argLen:         3,
+-		clobberFlags:   true,
+-		faultOnNilArg0: true,
 +		name:         "LoweredWB",
 +		auxType:      auxSym,
 +		argLen:       3,
 +		clobberFlags: true,
 +		symEffect:    SymNone,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 4}, // R2
-+				{1, 8}, // R3
-+			},
-+			clobbers: 4294918144, // R14 F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15
-+		},
-+	},
-+
-+	{
-+		name:      "LoweredStaticCall",
-+		auxType:   auxSymOff,
-+		argLen:    1,
-+		call:      true,
-+		symEffect: SymNone,
-+		reg: regInfo{
-+			clobbers: 12884901887, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 g
-+		},
-+	},
-+	{
-+		name:    "LoweredClosureCall",
-+		auxType: auxInt64,
-+		argLen:  3,
-+		call:    true,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+				{1, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+			clobbers: 12884901887, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 g
-+		},
-+	},
-+	{
-+		name:    "LoweredInterCall",
-+		auxType: auxInt64,
-+		argLen:  2,
-+		call:    true,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+			clobbers: 12884901887, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 g
-+		},
-+	},
-+	{
-+		name:              "LoweredAddr",
-+		auxType:           auxSymOff,
-+		argLen:            1,
-+		rematerializeable: true,
-+		symEffect:         SymAddr,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 4295032831}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
-+			},
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:    "LoweredMove",
-+		auxType: auxInt64,
-+		argLen:  3,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+				{1, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:    "LoweredZero",
-+		auxType: auxInt64,
-+		argLen:  2,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:   "LoweredGetClosurePtr",
-+		argLen: 0,
-+		reg: regInfo{
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:              "LoweredGetCallerPC",
-+		argLen:            0,
-+		rematerializeable: true,
-+		reg: regInfo{
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:              "LoweredGetCallerSP",
-+		argLen:            0,
-+		rematerializeable: true,
-+		reg: regInfo{
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:           "LoweredNilCheck",
-+		argLen:         2,
-+		nilCheck:       true,
-+		faultOnNilArg0: true,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:      "LoweredWB",
-+		auxType:   auxSym,
-+		argLen:    3,
-+		symEffect: SymNone,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+				{1, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:   "LoweredRound32F",
-+		argLen: 1,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 4294901760}, // F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15
-+			},
-+			outputs: []outputInfo{
-+				{0, 4294901760}, // F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15
-+			},
-+		},
-+	},
-+	{
-+		name:   "LoweredConvert",
-+		argLen: 2,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:   "Select",
-+		argLen: 3,
-+		asm:    wasm.ASelect,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 4295032831}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
-+				{1, 4295032831}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
-+				{2, 4295032831}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
-+			},
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:    "I64Load8U",
-+		auxType: auxInt64,
-+		argLen:  2,
-+		asm:     wasm.AI64Load8U,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-+			},
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:    "I64Load8S",
-+		auxType: auxInt64,
-+		argLen:  2,
-+		asm:     wasm.AI64Load8S,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-+			},
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:    "I64Load16U",
-+		auxType: auxInt64,
-+		argLen:  2,
-+		asm:     wasm.AI64Load16U,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-+			},
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:    "I64Load16S",
-+		auxType: auxInt64,
-+		argLen:  2,
-+		asm:     wasm.AI64Load16S,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-+			},
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:    "I64Load32U",
-+		auxType: auxInt64,
-+		argLen:  2,
-+		asm:     wasm.AI64Load32U,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-+			},
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:    "I64Load32S",
-+		auxType: auxInt64,
-+		argLen:  2,
-+		asm:     wasm.AI64Load32S,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-+			},
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:    "I64Load",
-+		auxType: auxInt64,
-+		argLen:  2,
-+		asm:     wasm.AI64Load,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-+			},
-+			outputs: []outputInfo{
-+				{0, 65535}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15
-+			},
-+		},
-+	},
-+	{
-+		name:    "I64Store8",
-+		auxType: auxInt64,
-+		argLen:  3,
-+		asm:     wasm.AI64Store8,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{1, 4295032831},  // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
-+				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-+			},
-+		},
-+	},
-+	{
-+		name:    "I64Store16",
-+		auxType: auxInt64,
-+		argLen:  3,
-+		asm:     wasm.AI64Store16,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{1, 4295032831},  // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
-+				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-+			},
-+		},
-+	},
-+	{
-+		name:    "I64Store32",
-+		auxType: auxInt64,
-+		argLen:  3,
-+		asm:     wasm.AI64Store32,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{1, 4295032831},  // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
-+				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-+			},
-+		},
-+	},
-+	{
-+		name:    "I64Store",
-+		auxType: auxInt64,
-+		argLen:  3,
-+		asm:     wasm.AI64Store,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{1, 4295032831},  // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP
-+				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-+			},
-+		},
-+	},
-+	{
-+		name:    "F32Load",
-+		auxType: auxInt64,
-+		argLen:  2,
-+		asm:     wasm.AF32Load,
-+		reg: regInfo{
-+			inputs: []inputInfo{
-+				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-+			},
-+			outputs: []outputInfo{
-+				{0, 4294901760}, // F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15
-+			},
-+		},
-+	},
-+	{
-+		name:    "F64Load",
-+		auxType: auxInt64,
-+		argLen:  2,
-+		asm:     wasm.AF64Load,
  		reg: regInfo{
  			inputs: []inputInfo{
- 				{0, 21474902015}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP SB
-@@ -31118,6 +34227,48 @@ var opcodeTable = [...]opInfo{
+-				{0, 2},     // R1
+-				{1, 56319}, // R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R11 R12 R14 SP
++				{0, 4}, // R2
++				{1, 8}, // R3
+ 			},
+-			clobbers: 2, // R1
++			clobbers: 4294918144, // R14 F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15
+ 		},
+ 	},
+ 
+@@ -31118,6 +34523,48 @@ var opcodeTable = [...]opInfo{
  		hasSideEffects: true,
  		generic:        true,
  	},
@@ -6474,7 +7158,7 @@ index 00e49c97b7..f4f0f54333 100644
  	{
  		name:      "Clobber",
  		auxType:   auxSymOff,
-@@ -31545,6 +34696,46 @@ var fpRegMaskS390X = regMask(4294901760)
+@@ -31545,6 +34992,46 @@ var fpRegMaskS390X = regMask(4294901760)
  var specialRegMaskS390X = regMask(0)
  var framepointerRegS390X = int8(-1)
  var linkRegS390X = int8(14)
@@ -6559,10 +7243,10 @@ index cd23fe87e5..0f0b07e39b 100644
  	return false
 diff --git a/src/cmd/compile/internal/ssa/rewriteThumb.go b/src/cmd/compile/internal/ssa/rewriteThumb.go
 new file mode 100644
-index 0000000000..2f2e20db2b
+index 0000000000..099bf3dcb1
 --- /dev/null
 +++ b/src/cmd/compile/internal/ssa/rewriteThumb.go
-@@ -0,0 +1,21056 @@
+@@ -0,0 +1,22688 @@
 +// Code generated from gen/Thumb.rules; DO NOT EDIT.
 +// generated with: cd gen; go run *.go
 +
@@ -7086,6 +7770,18 @@ index 0000000000..2f2e20db2b
 +		return rewriteValueThumb_OpThumbLessThan_0(v)
 +	case OpThumbLessThanU:
 +		return rewriteValueThumb_OpThumbLessThanU_0(v)
++	case OpThumbLoadOnce16:
++		return rewriteValueThumb_OpThumbLoadOnce16_0(v)
++	case OpThumbLoadOnce16idx:
++		return rewriteValueThumb_OpThumbLoadOnce16idx_0(v)
++	case OpThumbLoadOnce32:
++		return rewriteValueThumb_OpThumbLoadOnce32_0(v)
++	case OpThumbLoadOnce32idx:
++		return rewriteValueThumb_OpThumbLoadOnce32idx_0(v)
++	case OpThumbLoadOnce8:
++		return rewriteValueThumb_OpThumbLoadOnce8_0(v)
++	case OpThumbLoadOnce8idx:
++		return rewriteValueThumb_OpThumbLoadOnce8idx_0(v)
 +	case OpThumbMOVBUload:
 +		return rewriteValueThumb_OpThumbMOVBUload_0(v)
 +	case OpThumbMOVBUloadidx:
@@ -7240,6 +7936,18 @@ index 0000000000..2f2e20db2b
 +		return rewriteValueThumb_OpThumbSUBshiftRA_0(v)
 +	case OpThumbSUBshiftRL:
 +		return rewriteValueThumb_OpThumbSUBshiftRL_0(v)
++	case OpThumbStoreOnce16:
++		return rewriteValueThumb_OpThumbStoreOnce16_0(v)
++	case OpThumbStoreOnce16idx:
++		return rewriteValueThumb_OpThumbStoreOnce16idx_0(v)
++	case OpThumbStoreOnce32:
++		return rewriteValueThumb_OpThumbStoreOnce32_0(v)
++	case OpThumbStoreOnce32idx:
++		return rewriteValueThumb_OpThumbStoreOnce32idx_0(v)
++	case OpThumbStoreOnce8:
++		return rewriteValueThumb_OpThumbStoreOnce8_0(v)
++	case OpThumbStoreOnce8idx:
++		return rewriteValueThumb_OpThumbStoreOnce8idx_0(v)
 +	case OpThumbTEQ:
 +		return rewriteValueThumb_OpThumbTEQ_0(v)
 +	case OpThumbTEQconst:
@@ -15430,6 +16138,534 @@ index 0000000000..2f2e20db2b
 +	}
 +	return false
 +}
++func rewriteValueThumb_OpThumbLoadOnce16_0(v *Value) bool {
++	// match: (LoadOnce16 [off1] {sym} (ADDconst [off2] ptr) mem)
++	// cond:
++	// result: (LoadOnce16 [off1+off2] {sym} ptr mem)
++	for {
++		off1 := v.AuxInt
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDconst {
++			break
++		}
++		off2 := v_0.AuxInt
++		ptr := v_0.Args[0]
++		v.reset(OpThumbLoadOnce16)
++		v.AuxInt = off1 + off2
++		v.Aux = sym
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce16 [off1] {sym} (SUBconst [off2] ptr) mem)
++	// cond:
++	// result: (LoadOnce16 [off1-off2] {sym} ptr mem)
++	for {
++		off1 := v.AuxInt
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSUBconst {
++			break
++		}
++		off2 := v_0.AuxInt
++		ptr := v_0.Args[0]
++		v.reset(OpThumbLoadOnce16)
++		v.AuxInt = off1 - off2
++		v.Aux = sym
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce16 [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) mem)
++	// cond: canMergeSym(sym1,sym2)
++	// result: (LoadOnce16 [off1+off2] {mergeSym(sym1,sym2)} ptr mem)
++	for {
++		off1 := v.AuxInt
++		sym1 := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbMOVWaddr {
++			break
++		}
++		off2 := v_0.AuxInt
++		sym2 := v_0.Aux
++		ptr := v_0.Args[0]
++		if !(canMergeSym(sym1, sym2)) {
++			break
++		}
++		v.reset(OpThumbLoadOnce16)
++		v.AuxInt = off1 + off2
++		v.Aux = mergeSym(sym1, sym2)
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce16 [0] {sym} (ADD ptr idx) mem)
++	// cond: sym == nil
++	// result: (LoadOnce16idx ptr idx mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADD {
++			break
++		}
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		if !(sym == nil) {
++			break
++		}
++		v.reset(OpThumbLoadOnce16idx)
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce16 [0] {sym} (ADDshiftLL ptr idx [c]) mem)
++	// cond: sym == nil && c <= 3
++	// result: (LoadOnce16shiftLL ptr idx [c] mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDshiftLL {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		if !(sym == nil && c <= 3) {
++			break
++		}
++		v.reset(OpThumbLoadOnce16shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	return false
++}
++func rewriteValueThumb_OpThumbLoadOnce16idx_0(v *Value) bool {
++	// match: (LoadOnce16idx ptr (MOVWconst [c]) mem)
++	// cond:
++	// result: (LoadOnce16 [c] ptr mem)
++	for {
++		mem := v.Args[2]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbMOVWconst {
++			break
++		}
++		c := v_1.AuxInt
++		v.reset(OpThumbLoadOnce16)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce16idx (MOVWconst [c]) ptr mem)
++	// cond:
++	// result: (LoadOnce16 [c] ptr mem)
++	for {
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbMOVWconst {
++			break
++		}
++		c := v_0.AuxInt
++		ptr := v.Args[1]
++		v.reset(OpThumbLoadOnce16)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce16idx ptr (SLLconst idx [c]) mem)
++	// cond: c <= 3
++	// result: (LoadOnce16shiftLL ptr idx [c] mem)
++	for {
++		mem := v.Args[2]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_1.AuxInt
++		idx := v_1.Args[0]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbLoadOnce16shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	return false
++}
++func rewriteValueThumb_OpThumbLoadOnce32_0(v *Value) bool {
++	// match: (LoadOnce32 [off1] {sym} (ADDconst [off2] ptr) mem)
++	// cond:
++	// result: (LoadOnce32 [off1+off2] {sym} ptr mem)
++	for {
++		off1 := v.AuxInt
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDconst {
++			break
++		}
++		off2 := v_0.AuxInt
++		ptr := v_0.Args[0]
++		v.reset(OpThumbLoadOnce32)
++		v.AuxInt = off1 + off2
++		v.Aux = sym
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce32 [off1] {sym} (SUBconst [off2] ptr) mem)
++	// cond:
++	// result: (LoadOnce32 [off1-off2] {sym} ptr mem)
++	for {
++		off1 := v.AuxInt
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSUBconst {
++			break
++		}
++		off2 := v_0.AuxInt
++		ptr := v_0.Args[0]
++		v.reset(OpThumbLoadOnce32)
++		v.AuxInt = off1 - off2
++		v.Aux = sym
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce32 [0] {sym} (ADD ptr idx) mem)
++	// cond: sym == nil
++	// result: (LoadOnce32idx ptr idx mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADD {
++			break
++		}
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		if !(sym == nil) {
++			break
++		}
++		v.reset(OpThumbLoadOnce32idx)
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce32 [0] {sym} (ADDshiftLL ptr idx [c]) mem)
++	// cond: sym == nil && c <= 3
++	// result: (LoadOnce32shiftLL ptr idx [c] mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDshiftLL {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		if !(sym == nil && c <= 3) {
++			break
++		}
++		v.reset(OpThumbLoadOnce32shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	return false
++}
++func rewriteValueThumb_OpThumbLoadOnce32idx_0(v *Value) bool {
++	// match: (LoadOnce32idx ptr (MOVWconst [c]) mem)
++	// cond:
++	// result: (LoadOnce32 [c] ptr mem)
++	for {
++		mem := v.Args[2]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbMOVWconst {
++			break
++		}
++		c := v_1.AuxInt
++		v.reset(OpThumbLoadOnce32)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce32idx (MOVWconst [c]) ptr mem)
++	// cond:
++	// result: (LoadOnce32 [c] ptr mem)
++	for {
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbMOVWconst {
++			break
++		}
++		c := v_0.AuxInt
++		ptr := v.Args[1]
++		v.reset(OpThumbLoadOnce32)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce32idx ptr (SLLconst idx [c]) mem)
++	// cond: c <= 3
++	// result: (LoadOnce32shiftLL ptr idx [c] mem)
++	for {
++		mem := v.Args[2]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_1.AuxInt
++		idx := v_1.Args[0]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbLoadOnce32shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	return false
++}
++func rewriteValueThumb_OpThumbLoadOnce8_0(v *Value) bool {
++	// match: (LoadOnce8 [off1] {sym} (ADDconst [off2] ptr) mem)
++	// cond:
++	// result: (LoadOnce8 [off1+off2] {sym} ptr mem)
++	for {
++		off1 := v.AuxInt
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDconst {
++			break
++		}
++		off2 := v_0.AuxInt
++		ptr := v_0.Args[0]
++		v.reset(OpThumbLoadOnce8)
++		v.AuxInt = off1 + off2
++		v.Aux = sym
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce8 [off1] {sym} (SUBconst [off2] ptr) mem)
++	// cond:
++	// result: (LoadOnce8 [off1-off2] {sym} ptr mem)
++	for {
++		off1 := v.AuxInt
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSUBconst {
++			break
++		}
++		off2 := v_0.AuxInt
++		ptr := v_0.Args[0]
++		v.reset(OpThumbLoadOnce8)
++		v.AuxInt = off1 - off2
++		v.Aux = sym
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce8 [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) mem)
++	// cond: canMergeSym(sym1,sym2)
++	// result: (LoadOnce8 [off1+off2] {mergeSym(sym1,sym2)} ptr mem)
++	for {
++		off1 := v.AuxInt
++		sym1 := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbMOVWaddr {
++			break
++		}
++		off2 := v_0.AuxInt
++		sym2 := v_0.Aux
++		ptr := v_0.Args[0]
++		if !(canMergeSym(sym1, sym2)) {
++			break
++		}
++		v.reset(OpThumbLoadOnce8)
++		v.AuxInt = off1 + off2
++		v.Aux = mergeSym(sym1, sym2)
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce8 [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) mem)
++	// cond: canMergeSym(sym1,sym2)
++	// result: (LoadOnce8 [off1+off2] {mergeSym(sym1,sym2)} ptr mem)
++	for {
++		off1 := v.AuxInt
++		sym1 := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbMOVWaddr {
++			break
++		}
++		off2 := v_0.AuxInt
++		sym2 := v_0.Aux
++		ptr := v_0.Args[0]
++		if !(canMergeSym(sym1, sym2)) {
++			break
++		}
++		v.reset(OpThumbLoadOnce8)
++		v.AuxInt = off1 + off2
++		v.Aux = mergeSym(sym1, sym2)
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce8 [0] {sym} (ADD ptr idx) mem)
++	// cond: sym == nil
++	// result: (LoadOnce8idx ptr idx mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADD {
++			break
++		}
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		if !(sym == nil) {
++			break
++		}
++		v.reset(OpThumbLoadOnce8idx)
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce8 [0] {sym} (ADDshiftLL ptr idx [c]) mem)
++	// cond: sym == nil && c <= 3
++	// result: (LoadOnce8shiftLL ptr idx [c] mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDshiftLL {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		if !(sym == nil && c <= 3) {
++			break
++		}
++		v.reset(OpThumbLoadOnce8shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	return false
++}
++func rewriteValueThumb_OpThumbLoadOnce8idx_0(v *Value) bool {
++	// match: (LoadOnce8idx ptr (MOVWconst [c]) mem)
++	// cond:
++	// result: (LoadOnce8 [c] ptr mem)
++	for {
++		mem := v.Args[2]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbMOVWconst {
++			break
++		}
++		c := v_1.AuxInt
++		v.reset(OpThumbLoadOnce8)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce8idx (MOVWconst [c]) ptr mem)
++	// cond:
++	// result: (LoadOnce8 [c] ptr mem)
++	for {
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbMOVWconst {
++			break
++		}
++		c := v_0.AuxInt
++		ptr := v.Args[1]
++		v.reset(OpThumbLoadOnce8)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (LoadOnce8idx ptr (SLLconst idx [c]) mem)
++	// cond: c <= 3
++	// result: (LoadOnce8shiftLL ptr idx [c] mem)
++	for {
++		mem := v.Args[2]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_1.AuxInt
++		idx := v_1.Args[0]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbLoadOnce8shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	return false
++}
 +func rewriteValueThumb_OpThumbMOVBUload_0(v *Value) bool {
 +	// match: (MOVBUload [off1] {sym} (ADDconst [off2] ptr) mem)
 +	// cond:
@@ -15543,6 +16779,32 @@ index 0000000000..2f2e20db2b
 +		v.AddArg(mem)
 +		return true
 +	}
++	// match: (MOVBUload [0] {sym} (ADDshiftLL ptr idx [c]) mem)
++	// cond: sym == nil && c <= 3
++	// result: (MOVBUloadshiftLL ptr idx [c] mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDshiftLL {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		if !(sym == nil && c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVBUloadshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
 +	// match: (MOVBUload [off] {sym} (SB) _)
 +	// cond: symIsRO(sym)
 +	// result: (MOVWconst [int64(read8(sym, off))])
@@ -15619,6 +16881,50 @@ index 0000000000..2f2e20db2b
 +		v.reset(OpThumbMOVBUload)
 +		v.AuxInt = c
 +		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (MOVBUloadidx ptr (SLLconst idx [c]) mem)
++	// cond: c <= 3
++	// result: (MOVBUloadshiftLL ptr idx [c] mem)
++	for {
++		mem := v.Args[2]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_1.AuxInt
++		idx := v_1.Args[0]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVBUloadshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (MOVBUloadidx (SLLconst idx [c]) ptr mem)
++	// cond: c <= 3
++	// result: (MOVBUloadshiftLL ptr idx [c] mem)
++	for {
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[0]
++		ptr := v.Args[1]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVBUloadshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
 +		v.AddArg(mem)
 +		return true
 +	}
@@ -15793,6 +17099,32 @@ index 0000000000..2f2e20db2b
 +		v.AddArg(mem)
 +		return true
 +	}
++	// match: (MOVBload [0] {sym} (ADDshiftLL ptr idx [c]) mem)
++	// cond: sym == nil && c <= 3
++	// result: (MOVBloadshiftLL ptr idx [c] mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDshiftLL {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		if !(sym == nil && c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVBloadshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
 +	return false
 +}
 +func rewriteValueThumb_OpThumbMOVBloadidx_0(v *Value) bool {
@@ -15851,6 +17183,50 @@ index 0000000000..2f2e20db2b
 +		v.reset(OpThumbMOVBload)
 +		v.AuxInt = c
 +		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (MOVBloadidx ptr (SLLconst idx [c]) mem)
++	// cond: c <= 3
++	// result: (MOVBloadshiftLL ptr idx [c] mem)
++	for {
++		mem := v.Args[2]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_1.AuxInt
++		idx := v_1.Args[0]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVBloadshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (MOVBloadidx (SLLconst idx [c]) ptr mem)
++	// cond: c <= 3
++	// result: (MOVBloadshiftLL ptr idx [c] mem)
++	for {
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[0]
++		ptr := v.Args[1]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVBloadshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
 +		v.AddArg(mem)
 +		return true
 +	}
@@ -16096,6 +17472,34 @@ index 0000000000..2f2e20db2b
 +		v.AddArg(mem)
 +		return true
 +	}
++	// match: (MOVBstore [0] {sym} (ADDshiftLL ptr idx [c]) val mem)
++	// cond: sym == nil && c <= 3
++	// result: (MOVBstoreshiftLL ptr idx [c] val mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDshiftLL {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		if !(sym == nil && c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVBstoreshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
 +	return false
 +}
 +func rewriteValueThumb_OpThumbMOVBstoreidx_0(v *Value) bool {
@@ -16133,6 +17537,54 @@ index 0000000000..2f2e20db2b
 +		v.reset(OpThumbMOVBstore)
 +		v.AuxInt = c
 +		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (MOVBstoreidx ptr (SLLconst idx [c]) val mem)
++	// cond: c <= 3
++	// result: (MOVBstoreshiftLL ptr idx [c] val mem)
++	for {
++		mem := v.Args[3]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_1.AuxInt
++		idx := v_1.Args[0]
++		val := v.Args[2]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVBstoreshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (MOVBstoreidx (SLLconst idx [c]) ptr val mem)
++	// cond: c <= 3
++	// result: (MOVBstoreshiftLL ptr idx [c] val mem)
++	for {
++		mem := v.Args[3]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[0]
++		ptr := v.Args[1]
++		val := v.Args[2]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVBstoreshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
 +		v.AddArg(val)
 +		v.AddArg(mem)
 +		return true
@@ -16584,6 +18036,32 @@ index 0000000000..2f2e20db2b
 +		v.AddArg(mem)
 +		return true
 +	}
++	// match: (MOVHUload [0] {sym} (ADDshiftLL ptr idx [c]) mem)
++	// cond: sym == nil && c <= 3
++	// result: (MOVHUloadshiftLL ptr idx [c] mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDshiftLL {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		if !(sym == nil && c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVHUloadshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
 +	// match: (MOVHUload [off] {sym} (SB) _)
 +	// cond: symIsRO(sym)
 +	// result: (MOVWconst [int64(read16(sym, off, config.BigEndian))])
@@ -16660,6 +18138,50 @@ index 0000000000..2f2e20db2b
 +		v.reset(OpThumbMOVHUload)
 +		v.AuxInt = c
 +		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (MOVHUloadidx ptr (SLLconst idx [c]) mem)
++	// cond: c <= 3
++	// result: (MOVHUloadshiftLL ptr idx [c] mem)
++	for {
++		mem := v.Args[2]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_1.AuxInt
++		idx := v_1.Args[0]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVHUloadshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (MOVHUloadidx (SLLconst idx [c]) ptr mem)
++	// cond: c <= 3
++	// result: (MOVHUloadshiftLL ptr idx [c] mem)
++	for {
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[0]
++		ptr := v.Args[1]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVHUloadshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
 +		v.AddArg(mem)
 +		return true
 +	}
@@ -16859,6 +18381,32 @@ index 0000000000..2f2e20db2b
 +		v.AddArg(mem)
 +		return true
 +	}
++	// match: (MOVHload [0] {sym} (ADDshiftLL ptr idx [c]) mem)
++	// cond: sym == nil && c <= 3
++	// result: (MOVHloadshiftLL ptr idx [c] mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[1]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDshiftLL {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		if !(sym == nil && c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVHloadshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
 +	return false
 +}
 +func rewriteValueThumb_OpThumbMOVHloadidx_0(v *Value) bool {
@@ -16917,6 +18465,50 @@ index 0000000000..2f2e20db2b
 +		v.reset(OpThumbMOVHload)
 +		v.AuxInt = c
 +		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (MOVHloadidx ptr (SLLconst idx [c]) mem)
++	// cond: c <= 3
++	// result: (MOVHloadshiftLL ptr idx [c] mem)
++	for {
++		mem := v.Args[2]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_1.AuxInt
++		idx := v_1.Args[0]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVHloadshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (MOVHloadidx (SLLconst idx [c]) ptr mem)
++	// cond: c <= 3
++	// result: (MOVHloadshiftLL ptr idx [c] mem)
++	for {
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[0]
++		ptr := v.Args[1]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVHloadshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
 +		v.AddArg(mem)
 +		return true
 +	}
@@ -17170,6 +18762,34 @@ index 0000000000..2f2e20db2b
 +		v.AddArg(mem)
 +		return true
 +	}
++	// match: (MOVHstore [0] {sym} (ADDshiftLL ptr idx [c]) val mem)
++	// cond: sym == nil && c <= 3
++	// result: (MOVHstoreshiftLL ptr idx [c] val mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDshiftLL {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		if !(sym == nil && c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVHstoreshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
 +	return false
 +}
 +func rewriteValueThumb_OpThumbMOVHstoreidx_0(v *Value) bool {
@@ -17207,6 +18827,54 @@ index 0000000000..2f2e20db2b
 +		v.reset(OpThumbMOVHstore)
 +		v.AuxInt = c
 +		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (MOVHstoreidx ptr (SLLconst idx [c]) val mem)
++	// cond: c <= 3
++	// result: (MOVHstoreshiftLL ptr idx [c] val mem)
++	for {
++		mem := v.Args[3]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_1.AuxInt
++		idx := v_1.Args[0]
++		val := v.Args[2]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVHstoreshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (MOVHstoreidx (SLLconst idx [c]) ptr val mem)
++	// cond: c <= 3
++	// result: (MOVHstoreshiftLL ptr idx [c] val mem)
++	for {
++		mem := v.Args[3]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[0]
++		ptr := v.Args[1]
++		val := v.Args[2]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbMOVHstoreshiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
 +		v.AddArg(val)
 +		v.AddArg(mem)
 +		return true
@@ -21799,6 +23467,654 @@ index 0000000000..2f2e20db2b
 +		}
 +		v.reset(OpThumbMOVWconst)
 +		v.AuxInt = 0
++		return true
++	}
++	return false
++}
++func rewriteValueThumb_OpThumbStoreOnce16_0(v *Value) bool {
++	// match: (StoreOnce16 [off1] {sym} (ADDconst [off2] ptr) val mem)
++	// cond:
++	// result: (StoreOnce16 [off1+off2] {sym} ptr val mem)
++	for {
++		off1 := v.AuxInt
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDconst {
++			break
++		}
++		off2 := v_0.AuxInt
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		v.reset(OpThumbStoreOnce16)
++		v.AuxInt = off1 + off2
++		v.Aux = sym
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce16 [off1] {sym} (SUBconst [off2] ptr) val mem)
++	// cond:
++	// result: (StoreOnce16 [off1-off2] {sym} ptr val mem)
++	for {
++		off1 := v.AuxInt
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSUBconst {
++			break
++		}
++		off2 := v_0.AuxInt
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		v.reset(OpThumbStoreOnce16)
++		v.AuxInt = off1 - off2
++		v.Aux = sym
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce16 [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) val mem)
++	// cond: canMergeSym(sym1,sym2)
++	// result: (StoreOnce16 [off1+off2] {mergeSym(sym1,sym2)} ptr val mem)
++	for {
++		off1 := v.AuxInt
++		sym1 := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbMOVWaddr {
++			break
++		}
++		off2 := v_0.AuxInt
++		sym2 := v_0.Aux
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		if !(canMergeSym(sym1, sym2)) {
++			break
++		}
++		v.reset(OpThumbStoreOnce16)
++		v.AuxInt = off1 + off2
++		v.Aux = mergeSym(sym1, sym2)
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce16 [0] {sym} (ADD ptr idx) val mem)
++	// cond: sym == nil
++	// result: (StoreOnce16idx ptr idx val mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADD {
++			break
++		}
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		if !(sym == nil) {
++			break
++		}
++		v.reset(OpThumbStoreOnce16idx)
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce16 [0] {sym} (ADDshiftLL ptr idx [c]) val mem)
++	// cond: sym == nil && c <= 3
++	// result: (StoreOnce16shiftLL ptr idx [c] val mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDshiftLL {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		if !(sym == nil && c <= 3) {
++			break
++		}
++		v.reset(OpThumbStoreOnce16shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	return false
++}
++func rewriteValueThumb_OpThumbStoreOnce16idx_0(v *Value) bool {
++	// match: (StoreOnce16idx ptr (MOVWconst [c]) val mem)
++	// cond:
++	// result: (StoreOnce16 [c] ptr val mem)
++	for {
++		mem := v.Args[3]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbMOVWconst {
++			break
++		}
++		c := v_1.AuxInt
++		val := v.Args[2]
++		v.reset(OpThumbStoreOnce16)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce16idx (MOVWconst [c]) ptr val mem)
++	// cond:
++	// result: (StoreOnce16 [c] ptr val mem)
++	for {
++		mem := v.Args[3]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbMOVWconst {
++			break
++		}
++		c := v_0.AuxInt
++		ptr := v.Args[1]
++		val := v.Args[2]
++		v.reset(OpThumbStoreOnce16)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce16idx ptr (SLLconst idx [c]) val mem)
++	// cond: c <= 3
++	// result: (StoreOnce16shiftLL ptr idx [c] val mem)
++	for {
++		mem := v.Args[3]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_1.AuxInt
++		idx := v_1.Args[0]
++		val := v.Args[2]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbStoreOnce16shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce16idx (SLLconst idx [c]) ptr val mem)
++	// cond: c <= 3
++	// result: (StoreOnce16shiftLL ptr idx [c] val mem)
++	for {
++		mem := v.Args[3]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[0]
++		ptr := v.Args[1]
++		val := v.Args[2]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbStoreOnce16shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	return false
++}
++func rewriteValueThumb_OpThumbStoreOnce32_0(v *Value) bool {
++	// match: (StoreOnce32 [off1] {sym} (ADDconst [off2] ptr) val mem)
++	// cond:
++	// result: (StoreOnce32 [off1+off2] {sym} ptr val mem)
++	for {
++		off1 := v.AuxInt
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDconst {
++			break
++		}
++		off2 := v_0.AuxInt
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		v.reset(OpThumbStoreOnce32)
++		v.AuxInt = off1 + off2
++		v.Aux = sym
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce32 [off1] {sym} (SUBconst [off2] ptr) val mem)
++	// cond:
++	// result: (StoreOnce32 [off1-off2] {sym} ptr val mem)
++	for {
++		off1 := v.AuxInt
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSUBconst {
++			break
++		}
++		off2 := v_0.AuxInt
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		v.reset(OpThumbStoreOnce32)
++		v.AuxInt = off1 - off2
++		v.Aux = sym
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce32 [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) val mem)
++	// cond: canMergeSym(sym1,sym2)
++	// result: (StoreOnce32 [off1+off2] {mergeSym(sym1,sym2)} ptr val mem)
++	for {
++		off1 := v.AuxInt
++		sym1 := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbMOVWaddr {
++			break
++		}
++		off2 := v_0.AuxInt
++		sym2 := v_0.Aux
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		if !(canMergeSym(sym1, sym2)) {
++			break
++		}
++		v.reset(OpThumbStoreOnce32)
++		v.AuxInt = off1 + off2
++		v.Aux = mergeSym(sym1, sym2)
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce32 [0] {sym} (ADD ptr idx) val mem)
++	// cond: sym == nil
++	// result: (StoreOnce32idx ptr idx val mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADD {
++			break
++		}
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		if !(sym == nil) {
++			break
++		}
++		v.reset(OpThumbStoreOnce32idx)
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce32 [0] {sym} (ADDshiftLL ptr idx [c]) val mem)
++	// cond: sym == nil && c <= 3
++	// result: (StoreOnce32shiftLL ptr idx [c] val mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDshiftLL {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		if !(sym == nil && c <= 3) {
++			break
++		}
++		v.reset(OpThumbStoreOnce32shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	return false
++}
++func rewriteValueThumb_OpThumbStoreOnce32idx_0(v *Value) bool {
++	// match: (StoreOnce32idx ptr (MOVWconst [c]) val mem)
++	// cond:
++	// result: (StoreOnce32 [c] ptr val mem)
++	for {
++		mem := v.Args[3]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbMOVWconst {
++			break
++		}
++		c := v_1.AuxInt
++		val := v.Args[2]
++		v.reset(OpThumbStoreOnce32)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce32idx (MOVWconst [c]) ptr val mem)
++	// cond:
++	// result: (StoreOnce32 [c] ptr val mem)
++	for {
++		mem := v.Args[3]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbMOVWconst {
++			break
++		}
++		c := v_0.AuxInt
++		ptr := v.Args[1]
++		val := v.Args[2]
++		v.reset(OpThumbStoreOnce32)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce32idx ptr (SLLconst idx [c]) val mem)
++	// cond: c <= 3
++	// result: (StoreOnce32shiftLL ptr idx [c] val mem)
++	for {
++		mem := v.Args[3]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_1.AuxInt
++		idx := v_1.Args[0]
++		val := v.Args[2]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbStoreOnce32shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce32idx (SLLconst idx [c]) ptr val mem)
++	// cond: c <= 3
++	// result: (StoreOnce32shiftLL ptr idx [c] val mem)
++	for {
++		mem := v.Args[3]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[0]
++		ptr := v.Args[1]
++		val := v.Args[2]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbStoreOnce32shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	return false
++}
++func rewriteValueThumb_OpThumbStoreOnce8_0(v *Value) bool {
++	// match: (StoreOnce8 [off1] {sym} (ADDconst [off2] ptr) val mem)
++	// cond:
++	// result: (StoreOnce8 [off1+off2] {sym} ptr val mem)
++	for {
++		off1 := v.AuxInt
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDconst {
++			break
++		}
++		off2 := v_0.AuxInt
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		v.reset(OpThumbStoreOnce8)
++		v.AuxInt = off1 + off2
++		v.Aux = sym
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce8 [off1] {sym} (SUBconst [off2] ptr) val mem)
++	// cond:
++	// result: (StoreOnce8 [off1-off2] {sym} ptr val mem)
++	for {
++		off1 := v.AuxInt
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSUBconst {
++			break
++		}
++		off2 := v_0.AuxInt
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		v.reset(OpThumbStoreOnce8)
++		v.AuxInt = off1 - off2
++		v.Aux = sym
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce8 [off1] {sym1} (MOVWaddr [off2] {sym2} ptr) val mem)
++	// cond: canMergeSym(sym1,sym2)
++	// result: (StoreOnce8 [off1+off2] {mergeSym(sym1,sym2)} ptr val mem)
++	for {
++		off1 := v.AuxInt
++		sym1 := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbMOVWaddr {
++			break
++		}
++		off2 := v_0.AuxInt
++		sym2 := v_0.Aux
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		if !(canMergeSym(sym1, sym2)) {
++			break
++		}
++		v.reset(OpThumbStoreOnce8)
++		v.AuxInt = off1 + off2
++		v.Aux = mergeSym(sym1, sym2)
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce8 [0] {sym} (ADD ptr idx) val mem)
++	// cond: sym == nil
++	// result: (StoreOnce8idx ptr idx val mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADD {
++			break
++		}
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		if !(sym == nil) {
++			break
++		}
++		v.reset(OpThumbStoreOnce8idx)
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce8 [0] {sym} (ADDshiftLL ptr idx [c]) val mem)
++	// cond: sym == nil && c <= 3
++	// result: (StoreOnce8shiftLL ptr idx [c] val mem)
++	for {
++		if v.AuxInt != 0 {
++			break
++		}
++		sym := v.Aux
++		mem := v.Args[2]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbADDshiftLL {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[1]
++		ptr := v_0.Args[0]
++		val := v.Args[1]
++		if !(sym == nil && c <= 3) {
++			break
++		}
++		v.reset(OpThumbStoreOnce8shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	return false
++}
++func rewriteValueThumb_OpThumbStoreOnce8idx_0(v *Value) bool {
++	// match: (StoreOnce8idx ptr (MOVWconst [c]) val mem)
++	// cond:
++	// result: (StoreOnce8 [c] ptr val mem)
++	for {
++		mem := v.Args[3]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbMOVWconst {
++			break
++		}
++		c := v_1.AuxInt
++		val := v.Args[2]
++		v.reset(OpThumbStoreOnce8)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce8idx (MOVWconst [c]) ptr val mem)
++	// cond:
++	// result: (StoreOnce8 [c] ptr val mem)
++	for {
++		mem := v.Args[3]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbMOVWconst {
++			break
++		}
++		c := v_0.AuxInt
++		ptr := v.Args[1]
++		val := v.Args[2]
++		v.reset(OpThumbStoreOnce8)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce8idx ptr (SLLconst idx [c]) val mem)
++	// cond: c <= 3
++	// result: (StoreOnce8shiftLL ptr idx [c] val mem)
++	for {
++		mem := v.Args[3]
++		ptr := v.Args[0]
++		v_1 := v.Args[1]
++		if v_1.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_1.AuxInt
++		idx := v_1.Args[0]
++		val := v.Args[2]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbStoreOnce8shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (StoreOnce8idx (SLLconst idx [c]) ptr val mem)
++	// cond: c <= 3
++	// result: (StoreOnce8shiftLL ptr idx [c] val mem)
++	for {
++		mem := v.Args[3]
++		v_0 := v.Args[0]
++		if v_0.Op != OpThumbSLLconst {
++			break
++		}
++		c := v_0.AuxInt
++		idx := v_0.Args[0]
++		ptr := v.Args[1]
++		val := v.Args[2]
++		if !(c <= 3) {
++			break
++		}
++		v.reset(OpThumbStoreOnce8shiftLL)
++		v.AuxInt = c
++		v.AddArg(ptr)
++		v.AddArg(idx)
++		v.AddArg(val)
++		v.AddArg(mem)
 +		return true
 +	}
 +	return false
@@ -27765,10 +30081,10 @@ index 0000000000..66317b9c72
 +}
 diff --git a/src/cmd/compile/internal/thumb/ssa.go b/src/cmd/compile/internal/thumb/ssa.go
 new file mode 100644
-index 0000000000..654b9115c6
+index 0000000000..80a9baea70
 --- /dev/null
 +++ b/src/cmd/compile/internal/thumb/ssa.go
-@@ -0,0 +1,872 @@
+@@ -0,0 +1,899 @@
 +// Copyright 2016 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -28248,17 +30564,16 @@ index 0000000000..654b9115c6
 +		if reg := v.Args[0].RegName(); reg != wantreg {
 +			v.Fatalf("bad reg %s for symbol type %T, want %s", reg, v.Aux, wantreg)
 +		}
-+
-+	case ssa.OpThumbMOVBload,
-+		ssa.OpThumbMOVBUload,
++	case ssa.OpThumbMOVWload,
 +		ssa.OpThumbMOVHload,
 +		ssa.OpThumbMOVHUload,
-+		ssa.OpThumbMOVWload,
-+		ssa.OpThumbMOVFload,
++		ssa.OpThumbMOVBload,
++		ssa.OpThumbMOVBUload,
 +		ssa.OpThumbMOVDload,
-+		ssa.OpThumbLoadOnce8,
++		ssa.OpThumbMOVFload,
++		ssa.OpThumbLoadOnce32,
 +		ssa.OpThumbLoadOnce16,
-+		ssa.OpThumbLoadOnce32:
++		ssa.OpThumbLoadOnce8:
 +		p := s.Prog(v.Op.Asm())
 +		p.From.Type = obj.TYPE_MEM
 +		p.From.Reg = v.Args[0].Reg()
@@ -28269,24 +30584,38 @@ index 0000000000..654b9115c6
 +		} else {
 +			p.To.Reg = v.Reg()
 +		}
-+	case ssa.OpThumbMOVBstore,
++	case ssa.OpThumbMOVWstore,
 +		ssa.OpThumbMOVHstore,
-+		ssa.OpThumbMOVWstore,
-+		ssa.OpThumbMOVFstore,
++		ssa.OpThumbMOVBstore,
 +		ssa.OpThumbMOVDstore,
-+		ssa.OpThumbStoreOnce8,
++		ssa.OpThumbMOVFstore,
++		ssa.OpThumbStoreOnce32,
 +		ssa.OpThumbStoreOnce16,
-+		ssa.OpThumbStoreOnce32:
++		ssa.OpThumbStoreOnce8:
 +		p := s.Prog(v.Op.Asm())
 +		p.From.Type = obj.TYPE_REG
 +		p.From.Reg = v.Args[1].Reg()
 +		p.To.Type = obj.TYPE_MEM
 +		p.To.Reg = v.Args[0].Reg()
 +		gc.AddAux(&p.To, v)
-+	case ssa.OpThumbMOVWloadidx, ssa.OpThumbMOVBUloadidx, ssa.OpThumbMOVBloadidx, ssa.OpThumbMOVHUloadidx, ssa.OpThumbMOVHloadidx:
++	case ssa.OpThumbMOVWloadidx,
++		ssa.OpThumbMOVHUloadidx,
++		ssa.OpThumbMOVHloadidx,
++		ssa.OpThumbMOVBUloadidx,
++		ssa.OpThumbMOVBloadidx,
++		ssa.OpThumbLoadOnce32idx,
++		ssa.OpThumbLoadOnce16idx,
++		ssa.OpThumbLoadOnce8idx:
 +		// this is just shift 0 bits
 +		fallthrough
-+	case ssa.OpThumbMOVWloadshiftLL:
++	case ssa.OpThumbMOVWloadshiftLL,
++		ssa.OpThumbMOVHUloadshiftLL,
++		ssa.OpThumbMOVHloadshiftLL,
++		ssa.OpThumbMOVBUloadshiftLL,
++		ssa.OpThumbMOVBloadshiftLL,
++		ssa.OpThumbLoadOnce32shiftLL,
++		ssa.OpThumbLoadOnce16shiftLL,
++		ssa.OpThumbLoadOnce8shiftLL:
 +		var toreg int16
 +		if _, ok := v.Block.Func.RegAlloc[v.ID].(ssa.LocPair); ok {
 +			toreg = v.Reg0()
@@ -28295,10 +30624,20 @@ index 0000000000..654b9115c6
 +		}
 +		p := genshift(s, v.Op.Asm(), 0, v.Args[1].Reg(), toreg, thumb.SHIFT_LL, v.AuxInt)
 +		p.From.Reg = v.Args[0].Reg()
-+	case ssa.OpThumbMOVWstoreidx, ssa.OpThumbMOVBstoreidx, ssa.OpThumbMOVHstoreidx:
++	case ssa.OpThumbMOVWstoreidx,
++		ssa.OpThumbMOVHstoreidx,
++		ssa.OpThumbMOVBstoreidx,
++		ssa.OpThumbStoreOnce32idx,
++		ssa.OpThumbStoreOnce16idx,
++		ssa.OpThumbStoreOnce8idx:
 +		// this is just shift 0 bits
 +		fallthrough
-+	case ssa.OpThumbMOVWstoreshiftLL:
++	case ssa.OpThumbMOVWstoreshiftLL,
++		ssa.OpThumbMOVHstoreshiftLL,
++		ssa.OpThumbMOVBstoreshiftLL,
++		ssa.OpThumbStoreOnce32shiftLL,
++		ssa.OpThumbStoreOnce16shiftLL,
++		ssa.OpThumbStoreOnce8shiftLL:
 +		p := s.Prog(v.Op.Asm())
 +		p.From.Type = obj.TYPE_REG
 +		p.From.Reg = v.Args[2].Reg()
@@ -28409,13 +30748,17 @@ index 0000000000..654b9115c6
 +		p.To.Sym = gc.Duffcopy
 +		p.To.Offset = v.AuxInt
 +	case ssa.OpThumbLoweredNilCheck:
-+		// Issue a load which will fault if arg is nil.
-+		p := s.Prog(thumb.AMOVB)
-+		p.From.Type = obj.TYPE_MEM
-+		p.From.Reg = v.Args[0].Reg()
-+		gc.AddAux(&p.From, v)
-+		p.To.Type = obj.TYPE_REG
-+		p.To.Reg = thumb.REGTMP
++		if objabi.GOOS == "noos" {
++			// BUG: see https://github.com/embeddedgo/go/issues/1
++		} else {
++			// Issue a load which will fault if arg is nil.
++			p := s.Prog(thumb.AMOVBU)
++			p.From.Type = obj.TYPE_MEM
++			p.From.Reg = v.Args[0].Reg()
++			gc.AddAux(&p.From, v)
++			p.To.Type = obj.TYPE_REG
++			p.To.Reg = thumb.REGTMP
++		}
 +		if gc.Debug_checknil != 0 && v.Pos.Line() > 1 { // v.Pos.Line()==1 in generated wrappers
 +			gc.Warnl(v.Pos, "generated nil check")
 +		}
@@ -28830,6 +31173,19 @@ index 303fa469e4..bc96f4aae8 100644
 +	s.Set(AttrISR, flag&ISR != 0)
  	s.Type = objabi.STEXT
  	ctxt.Text = append(ctxt.Text, s)
+ 
+diff --git a/src/cmd/internal/obj/sizeof_test.go b/src/cmd/internal/obj/sizeof_test.go
+index e70d174637..4865f8e44b 100644
+--- a/src/cmd/internal/obj/sizeof_test.go
++++ b/src/cmd/internal/obj/sizeof_test.go
+@@ -23,7 +23,7 @@ func TestSizeof(t *testing.T) {
+ 		_64bit uintptr     // size on 64bit platforms
+ 	}{
+ 		{Addr{}, 32, 48},
+-		{LSym{}, 56, 104},
++		{LSym{}, 60, 104},
+ 		{Prog{}, 132, 200},
+ 	}
  
 diff --git a/src/cmd/internal/obj/textflag.go b/src/cmd/internal/obj/textflag.go
 index d2cec734b1..1b9975754b 100644
@@ -46336,15 +48692,13 @@ index 0000000000..3a73f9e393
 \ No newline at end of file
 diff --git a/src/embedded/mmio/mb.go b/src/embedded/mmio/mb.go
 new file mode 100644
-index 0000000000..b3e64c926b
+index 0000000000..d9cb0cdcb9
 --- /dev/null
 +++ b/src/embedded/mmio/mb.go
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,16 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
-+
-+// +build noos
 +
 +package mmio
 +
@@ -47054,10 +49408,10 @@ index 0000000000..2b03a6b291
 +}
 diff --git a/src/embedded/rtos/systim.go b/src/embedded/rtos/systim.go
 new file mode 100644
-index 0000000000..9415deb5b5
+index 0000000000..97644b3663
 --- /dev/null
 +++ b/src/embedded/rtos/systim.go
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,35 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -47084,6 +49438,12 @@ index 0000000000..9415deb5b5
 +//
 +// The System Timer interrupt handler, if used, must run with IntPrioSysTimer
 +// priority.
++//
++// SetSystemTimer is intended to be called only once, at the very beginning of
++// the system initialization. If you want to change the system timer
++// implementation at a later stage (which is discouraged) you must ensure a
++// continuity of time and that all gorutines that sleeeps using old setalarm
++// function will be wakeup.
 +func SetSystemTimer(nanotime func() int64, setalarm func(ns int64)) error {
 +	return setSystemTimer(nanotime, setalarm)
 +}
@@ -55890,10 +58250,10 @@ index 0000000000..6cdeb88294
 +
 diff --git a/src/runtime/rt0_noos_thumb.s b/src/runtime/rt0_noos_thumb.s
 new file mode 100644
-index 0000000000..b0908d8bb8
+index 0000000000..7f495ea97d
 --- /dev/null
 +++ b/src/runtime/rt0_noos_thumb.s
-@@ -0,0 +1,834 @@
+@@ -0,0 +1,832 @@
 +// Copyright 2009 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -56471,7 +58831,7 @@ index 0000000000..b0908d8bb8
 +
 +// The top-most function running on a goroutine
 +// returns to goexit+PCQuantum.
-+TEXT runtime·goexit(SB),NOSPLIT|NOFRAME,$0-0
++TEXT runtime·goexit(SB),NOSPLIT|NOFRAME|TOPFRAME,$0-0
 +	NOP2
 +	BL  runtime·goexit1(SB)  // does not return
 +	// traceback from goexit1 must hit code range of goexit
@@ -56501,9 +58861,8 @@ index 0000000000..b0908d8bb8
 +TEXT runtime·sigreturn(SB),NOSPLIT,$0-0
 +	RET
 +
-+#ifndef GOOS_nacl
 +// This is called from .init_array and follows the platform, not Go, ABI.
-+TEXT runtime·addmoduledata(SB),NOSPLIT,$0-8
++TEXT runtime·addmoduledata(SB),NOSPLIT,$0-0
 +	MOVW  R9, saver9-4(SP)        // The access to global variables below implicitly uses R9, which is callee-save
 +	MOVW  REGCTXT, saver11-8(SP)  // Likewise, R11 is the REGCTXT register, but callee-save in C ABI
 +	MOVW  runtime·lastmoduledatap(SB), R1
@@ -56512,7 +58871,6 @@ index 0000000000..b0908d8bb8
 +	MOVW  saver11-8(SP), REGCTXT
 +	MOVW  saver9-4(SP), R9
 +	RET
-+#endif
 +
 +TEXT ·checkASM(SB),NOSPLIT,$0-1
 +	MOVW  $1, R3
@@ -58498,7 +60856,7 @@ index 0000000000..df0906b142
 +type mOS [7]uint32
 diff --git a/src/runtime/tasker_noos_thumb.s b/src/runtime/tasker_noos_thumb.s
 new file mode 100644
-index 0000000000..77fb85d41c
+index 0000000000..03905db825
 --- /dev/null
 +++ b/src/runtime/tasker_noos_thumb.s
 @@ -0,0 +1,317 @@
@@ -58554,7 +60912,7 @@ index 0000000000..77fb85d41c
 +	MOVW  $ICSR_ADDR, R0
 +	MOVW  $ICSR_PENDSVCLR, R1
 +	MOVW  R1, (R0)
-+	DMB   // ensure clearing happens before reading something signaled by PendSV
++	DMB   // ensure clearing happens before reading something for what we woke
 +	RET
 +
 +// Exception handlers
