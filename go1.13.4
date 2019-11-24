@@ -49252,10 +49252,10 @@ index 0000000000..351d365546
 +}
 diff --git a/src/embedded/rtos/nanotime.go b/src/embedded/rtos/nanotime.go
 new file mode 100644
-index 0000000000..6525567f14
+index 0000000000..1e9aebcd2c
 --- /dev/null
 +++ b/src/embedded/rtos/nanotime.go
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,19 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49267,8 +49267,14 @@ index 0000000000..6525567f14
 +// Nanotime returns monotonic time in nanosecond.
 +func Nanotime() int64 { return runtime_nanotime() }
 +
++// Nanosleep pauses the current goroutine for at least ns nanosecond.
++func Nanosleep(ns int64) { time_sleep(ns) }
++
 +//go:linkname runtime_nanotime runtime.nanotime
 +func runtime_nanotime() int64
++
++//go:linkname time_sleep time.Sleep
++func time_sleep(ns int64)
 diff --git a/src/embedded/rtos/note.go b/src/embedded/rtos/note.go
 new file mode 100644
 index 0000000000..217ed3661e
@@ -57933,15 +57939,17 @@ index 0000000000..fa1b62ef6b
 +}
 diff --git a/src/runtime/os_noos.go b/src/runtime/os_noos.go
 new file mode 100644
-index 0000000000..b8f5f33650
+index 0000000000..0b5347c313
 --- /dev/null
 +++ b/src/runtime/os_noos.go
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,107 @@
 +// Copyright 2018 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
 +
 +package runtime
++
++import "unsafe"
 +
 +const _NSIG = 0
 +
@@ -57999,17 +58007,10 @@ index 0000000000..b8f5f33650
 +	setsystim1()
 +}
 +
-+func setsystim1()
-+
-+func newosproc(mp *m)
-+
-+//go:noescape
-+func futexsleep(addr *uint32, val uint32, ns int64)
-+
-+//go:noescape
-+func futexwakeup(addr *uint32, cnt uint32)
-+
-+func osyield()
++//go:nosplit
++func usleep(usec uint32) {
++	nanosleep(int64(usec) * 1000)
++}
 +
 +//go:nosplit
 +func getRandomData(r []byte) {
@@ -58023,6 +58024,23 @@ index 0000000000..b8f5f33650
 +	physPageSize = _PageSize
 +}
 +
++func setsystim1()
++func newosproc(mp *m)
++func exit(code int32)
++func osyield()
++
++//go:noescape
++func write(fd uintptr, p unsafe.Pointer, n int32) int32
++
++//go:noescape
++func futexsleep(addr *uint32, val uint32, ns int64)
++
++//go:noescape
++func futexwakeup(addr *uint32, cnt uint32)
++
++//go:noescape
++func exitThread(wait *uint32)
++
 +// syscalls not used by runtime
 +
 +func setwalltime(sec int64, nsec int32)
@@ -58031,6 +58049,7 @@ index 0000000000..b8f5f33650
 +func setirqenabled(irq, enabled int) (errno int)
 +func irqctl(irq, ctl int) (enabled, prio, errno int)
 +func notelwakeup(n *notel)
++func nanosleep(ns int64)
 diff --git a/src/runtime/os_noos_thumb.go b/src/runtime/os_noos_thumb.go
 new file mode 100644
 index 0000000000..6c7fd3c1c3
@@ -59255,6 +59274,18 @@ index 7ae3eeef83..ff32f61a93 100644
  
  	// After a stack split check the SP is allowed to be this
  	// many bytes below the stack guard. This saves an instruction
+diff --git a/src/runtime/stubs2.go b/src/runtime/stubs2.go
+index 57134f7354..945123b3ec 100644
+--- a/src/runtime/stubs2.go
++++ b/src/runtime/stubs2.go
+@@ -9,6 +9,7 @@
+ // +build !js
+ // +build !darwin
+ // +build !aix
++// +build !noos
+ 
+ package runtime
+ 
 diff --git a/src/runtime/stubs32.go b/src/runtime/stubs32.go
 index 149560fd93..01d0bb2b61 100644
 --- a/src/runtime/stubs32.go
@@ -59897,7 +59928,7 @@ index 0000000000..16461e44f9
 +	RET  
 diff --git a/src/runtime/sys_noos_thumb.s b/src/runtime/sys_noos_thumb.s
 new file mode 100644
-index 0000000000..0a30765296
+index 0000000000..c27ad5dd02
 --- /dev/null
 +++ b/src/runtime/sys_noos_thumb.s
 @@ -0,0 +1,137 @@
@@ -59917,7 +59948,7 @@ index 0000000000..0a30765296
 +DATA runtime·syscalls+(SYS_futexsleep*4)(SB)/4, $·sysfutexsleep(SB)
 +DATA runtime·syscalls+(SYS_futexwakeup*4)(SB)/4, $·sysfutexwakeup(SB)
 +DATA runtime·syscalls+(SYS_osyield*4)(SB)/4, $·curcpuSchedule(SB)
-+DATA runtime·syscalls+(SYS_usleep*4)(SB)/4, $·sysusleep(SB)
++DATA runtime·syscalls+(SYS_nanosleep*4)(SB)/4, $·sysnanosleep(SB)
 +DATA runtime·syscalls+(SYS_walltime*4)(SB)/4, $·syswalltime(SB)
 +DATA runtime·syscalls+(SYS_setwalltime*4)(SB)/4, $·syssetwalltime(SB)
 +DATA runtime·syscalls+(SYS_write*4)(SB)/4, $·syswrite(SB)
@@ -59991,10 +60022,10 @@ index 0000000000..0a30765296
 +	DMB  MB_ST
 +	RET
 +
-+// func usleep(usec uint32)
-+TEXT ·usleep(SB),NOSPLIT|NOFRAME,$0-4
-+	MOVW  $SYS_usleep, R4
-+	MOVW  $(4+4), R5
++// func nanosleep(ns int64)
++TEXT ·nanosleep(SB),NOSPLIT|NOFRAME,$0-8
++	MOVW  $SYS_nanosleep, R4
++	MOVW  $(8+4), R5
 +	MOVW  $0, R6
 +	SWI
 +	RET
@@ -60040,7 +60071,7 @@ index 0000000000..0a30765296
 +	RET
 diff --git a/src/runtime/syscall_noos.h b/src/runtime/syscall_noos.h
 new file mode 100644
-index 0000000000..205d09a32b
+index 0000000000..6ade267166
 --- /dev/null
 +++ b/src/runtime/syscall_noos.h
 @@ -0,0 +1,18 @@
@@ -60055,7 +60086,7 @@ index 0000000000..205d09a32b
 +#define SYS_futexsleep     4
 +#define SYS_futexwakeup    5
 +#define SYS_osyield        6
-+#define SYS_usleep         7
++#define SYS_nanosleep         7
 +#define SYS_walltime       8
 +#define SYS_setwalltime    9
 +#define SYS_write         10
@@ -60064,10 +60095,10 @@ index 0000000000..205d09a32b
 +#define SYS_NUM           13
 diff --git a/src/runtime/tasker_noos.go b/src/runtime/tasker_noos.go
 new file mode 100644
-index 0000000000..6aed2767aa
+index 0000000000..a100bfc91c
 --- /dev/null
 +++ b/src/runtime/tasker_noos.go
-@@ -0,0 +1,545 @@
+@@ -0,0 +1,544 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -60518,17 +60549,16 @@ index 0000000000..6aed2767aa
 +
 +//go:nowritebarrierrec
 +//go:nosplit
-+func sysusleep(usec uint32) {
-+	if usec == 0 {
-+		return
++func sysnanosleep(ns int64) {
++	if uint64(ns) < 64 {
++		return // to short to sleep (64 ns selected arbitrary)
 +	}
 +	curcpuSavectx()
 +	curcpu := getcpuctx()
 +	m := curcpu.exe.ptr()
 +	curcpu.exe = 0
-+	deadline := curcpu.t.nanotime() + int64(usec)*1e3
 +	msetkey(m, 0)
-+	msetval(m, deadline)
++	msetval(m, curcpu.t.nanotime()+ns)
 +	wt := &curcpu.waitingt
 +	wt.lock()
 +	wt.insertbyval(m)
