@@ -48326,10 +48326,10 @@ index 0000000000..826d16d5b4
 +	RET
 diff --git a/src/embedded/arch/cortexm/systim/systim_thumb.go b/src/embedded/arch/cortexm/systim/systim_thumb.go
 new file mode 100644
-index 0000000000..db8b8f83dc
+index 0000000000..e0b7abeea2
 --- /dev/null
 +++ b/src/embedded/arch/cortexm/systim/systim_thumb.go
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,77 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -48344,7 +48344,6 @@ index 0000000000..db8b8f83dc
 +package systim
 +
 +import (
-+	"embedded/mmio"
 +	"internal/cpu/cortexm"
 +	"internal/cpu/cortexm/scb"
 +	"internal/cpu/cortexm/systick"
@@ -48363,9 +48362,7 @@ index 0000000000..db8b8f83dc
 +	var downtick uint32
 +	reloadcnt := systim.reloadcnt // non-atomic!
 +	for {
-+		mmio.MB()
 +		downtick = uint32(st.CURRENT().Load())
-+		mmio.MB()
 +		reloadcnt1 := systim.reloadcnt // non-atomic!
 +		if reloadcnt1 == reloadcnt {
 +			break
@@ -49277,10 +49274,10 @@ index 0000000000..1e9aebcd2c
 +func time_sleep(ns int64)
 diff --git a/src/embedded/rtos/note.go b/src/embedded/rtos/note.go
 new file mode 100644
-index 0000000000..217ed3661e
+index 0000000000..88e71c6f85
 --- /dev/null
 +++ b/src/embedded/rtos/note.go
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,40 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49305,20 +49302,22 @@ index 0000000000..217ed3661e
 +}
 +
 +// Sleep sleeps on cleared note until other goroutine or interrupt handler
-+// call Wakeup or until the timeout ns.
++// call Wakeup or until the timeout.
 +func (n *Note) Sleep(ns int64) bool { return runtime_notetsleepg(n, ns) }
 +
 +// Wakeup wakeups the goroutine that sleeps or will try to sleep on the note.
 +func (n *Note) Wakeup() { notewakeup(n) }
 +
-+// Clear clears the note.
-+func (n *Note) Clear() { runtime_noteclear(n) }
++// Clear clears the note. It also behaves as full memory barrier in a way that
++// the Clear itself and any memory access preceding it in the program order
++// happens before any memory access that follows it.
++func (n *Note) Clear() { atomic_Storeuintptr(&n.key, 0) }
 +
 +//go:linkname runtime_notetsleepg runtime.notetsleepg
 +func runtime_notetsleepg(n *Note, ns int64) bool
 +
-+//go:linkname runtime_noteclear runtime.noteclear
-+func runtime_noteclear(n *Note)
++//go:linkname atomic_Storeuintptr runtime/internal/atomic.Storeuintptr
++func atomic_Storeuintptr(p *uintptr, v uintptr)
 diff --git a/src/embedded/rtos/note_noos.go b/src/embedded/rtos/note_noos.go
 new file mode 100644
 index 0000000000..6dea67f487
