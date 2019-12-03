@@ -746,10 +746,18 @@ index 4d354f23cf..b81fae779b 100644
  		case 1, 2, 4, 8:
  			return true
 diff --git a/src/cmd/compile/internal/gc/ssa.go b/src/cmd/compile/internal/gc/ssa.go
-index 5509e3d182..0974f24b58 100644
+index 5509e3d182..d1c5099a81 100644
 --- a/src/cmd/compile/internal/gc/ssa.go
 +++ b/src/cmd/compile/internal/gc/ssa.go
-@@ -3054,22 +3054,22 @@ func init() {
+@@ -3016,6 +3016,7 @@ func init() {
+ 			},
+ 			all...)
+ 	}
++
+ 	addF("runtime/internal/math", "MulUintptr",
+ 		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
+ 			if s.config.PtrSize == 4 {
+@@ -3054,22 +3055,22 @@ func init() {
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			return s.newValue1(ssa.OpCtz32, types.Types[TINT], args[0])
  		},
@@ -776,7 +784,7 @@ index 5509e3d182..0974f24b58 100644
  
  	/******** runtime/internal/atomic ********/
  	addF("runtime/internal/atomic", "Load",
-@@ -3267,7 +3267,7 @@ func init() {
+@@ -3267,7 +3268,7 @@ func init() {
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			return s.newValue1(ssa.OpSqrt, types.Types[TFLOAT64], args[0])
  		},
@@ -785,7 +793,7 @@ index 5509e3d182..0974f24b58 100644
  	addF("math", "Trunc",
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			return s.newValue1(ssa.OpTrunc, types.Types[TFLOAT64], args[0])
-@@ -3352,12 +3352,12 @@ func init() {
+@@ -3352,12 +3353,12 @@ func init() {
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			return s.newValue1(ssa.OpCtz64, types.Types[TINT], args[0])
  		},
@@ -800,7 +808,7 @@ index 5509e3d182..0974f24b58 100644
  	addF("math/bits", "TrailingZeros16",
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			x := s.newValue1(ssa.OpZeroExt16to32, types.Types[TUINT32], args[0])
-@@ -3370,7 +3370,7 @@ func init() {
+@@ -3370,7 +3371,7 @@ func init() {
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			return s.newValue1(ssa.OpCtz16, types.Types[TINT], args[0])
  		},
@@ -809,7 +817,7 @@ index 5509e3d182..0974f24b58 100644
  	addF("math/bits", "TrailingZeros16",
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			x := s.newValue1(ssa.OpZeroExt16to64, types.Types[TUINT64], args[0])
-@@ -3391,7 +3391,7 @@ func init() {
+@@ -3391,7 +3392,7 @@ func init() {
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			return s.newValue1(ssa.OpCtz8, types.Types[TINT], args[0])
  		},
@@ -818,7 +826,7 @@ index 5509e3d182..0974f24b58 100644
  	addF("math/bits", "TrailingZeros8",
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			x := s.newValue1(ssa.OpZeroExt8to64, types.Types[TUINT64], args[0])
-@@ -3408,7 +3408,7 @@ func init() {
+@@ -3408,7 +3409,7 @@ func init() {
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			return s.newValue1(ssa.OpBitLen64, types.Types[TINT], args[0])
  		},
@@ -827,7 +835,7 @@ index 5509e3d182..0974f24b58 100644
  	addF("math/bits", "Len32",
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			return s.newValue1(ssa.OpBitLen32, types.Types[TINT], args[0])
-@@ -3422,7 +3422,7 @@ func init() {
+@@ -3422,7 +3423,7 @@ func init() {
  			x := s.newValue1(ssa.OpZeroExt32to64, types.Types[TUINT64], args[0])
  			return s.newValue1(ssa.OpBitLen64, types.Types[TINT], x)
  		},
@@ -836,7 +844,7 @@ index 5509e3d182..0974f24b58 100644
  	addF("math/bits", "Len16",
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			if s.config.PtrSize == 4 {
-@@ -3432,7 +3432,7 @@ func init() {
+@@ -3432,7 +3433,7 @@ func init() {
  			x := s.newValue1(ssa.OpZeroExt16to64, types.Types[TUINT64], args[0])
  			return s.newValue1(ssa.OpBitLen64, types.Types[TINT], x)
  		},
@@ -845,7 +853,7 @@ index 5509e3d182..0974f24b58 100644
  	addF("math/bits", "Len16",
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			return s.newValue1(ssa.OpBitLen16, types.Types[TINT], args[0])
-@@ -3447,7 +3447,7 @@ func init() {
+@@ -3447,7 +3448,7 @@ func init() {
  			x := s.newValue1(ssa.OpZeroExt8to64, types.Types[TUINT64], args[0])
  			return s.newValue1(ssa.OpBitLen64, types.Types[TINT], x)
  		},
@@ -854,7 +862,7 @@ index 5509e3d182..0974f24b58 100644
  	addF("math/bits", "Len8",
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
  			return s.newValue1(ssa.OpBitLen8, types.Types[TINT], args[0])
-@@ -3460,7 +3460,7 @@ func init() {
+@@ -3460,7 +3461,7 @@ func init() {
  			}
  			return s.newValue1(ssa.OpBitLen64, types.Types[TINT], args[0])
  		},
@@ -863,7 +871,7 @@ index 5509e3d182..0974f24b58 100644
  	// LeadingZeros is handled because it trivially calls Len.
  	addF("math/bits", "Reverse64",
  		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
-@@ -3659,6 +3659,53 @@ func init() {
+@@ -3659,6 +3660,61 @@ func init() {
  			return s.newValue3(ssa.OpDiv128u, types.NewTuple(types.Types[TUINT64], types.Types[TUINT64]), args[0], args[1], args[2])
  		},
  		sys.ArchAMD64)
@@ -914,10 +922,18 @@ index 5509e3d182..0974f24b58 100644
 +			return nil
 +		},
 +		sys.ArchThumb)
++
++	/******** embedded/rtos ********/
++	add("embedded/rtos", "publicationBarrier",
++		func(s *state, n *Node, args []*ssa.Value) *ssa.Value {
++			s.vars[&memVar] = s.newValue1(ssa.OpPublicationBarrier, types.TypeMem, s.mem())
++			return nil
++		},
++		sys.ArchThumb)
  }
  
  // findIntrinsic returns a function which builds the SSA equivalent of the
-@@ -5873,7 +5920,7 @@ func (s *SSAGenState) Call(v *ssa.Value) *obj.Prog {
+@@ -5873,7 +5929,7 @@ func (s *SSAGenState) Call(v *ssa.Value) *obj.Prog {
  		switch thearch.LinkArch.Family {
  		case sys.AMD64, sys.I386, sys.PPC64, sys.S390X, sys.Wasm:
  			p.To.Type = obj.TYPE_REG
@@ -963,10 +979,10 @@ index e46d937e42..1c07f4bf15 100644
  		c.RegSize = 8
 diff --git a/src/cmd/compile/internal/ssa/gen/Thumb.rules b/src/cmd/compile/internal/ssa/gen/Thumb.rules
 new file mode 100644
-index 0000000000..122af53cc9
+index 0000000000..949602377c
 --- /dev/null
 +++ b/src/cmd/compile/internal/ssa/gen/Thumb.rules
-@@ -0,0 +1,1343 @@
+@@ -0,0 +1,1346 @@
 +// Copyright 2016 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -1222,6 +1238,9 @@ index 0000000000..122af53cc9
 +(MMIOStore16 ptr val mem) -> (StoreOnce16 ptr val mem)
 +(MMIOStore32 ptr val mem) -> (StoreOnce32 ptr val mem)
 +(MMIOMB mem) -> (DSB mem) // use DSB instead of DMB because of memory mapped CPU controll registers and to ensure memory update before the sleep (before WFI, WFE)
++
++// publication barrier
++(PublicationBarrier mem) -> (DMB_ST mem)
 +
 +// zero instructions
 +(Zero [0] _ mem) -> mem
@@ -2312,10 +2331,10 @@ index 0000000000..122af53cc9
 +(MOVWload [off] {sym} (SB) _) && symIsRO(sym) -> (MOVWconst [int64(int32(read32(sym, off, config.BigEndian)))])
 diff --git a/src/cmd/compile/internal/ssa/gen/ThumbOps.go b/src/cmd/compile/internal/ssa/gen/ThumbOps.go
 new file mode 100644
-index 0000000000..a48436e147
+index 0000000000..67a51067dc
 --- /dev/null
 +++ b/src/cmd/compile/internal/ssa/gen/ThumbOps.go
-@@ -0,0 +1,550 @@
+@@ -0,0 +1,551 @@
 +// Copyright 2016 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -2686,6 +2705,7 @@ index 0000000000..a48436e147
 +		{name: "StoreOnce16", argLength: 3, reg: gpstore, aux: "SymOff", asm: "MOVH", typ: "Mem", symEffect: "Write", hasSideEffects: true, faultOnNilArg0: true},
 +		{name: "StoreOnce32", argLength: 3, reg: gpstore, aux: "SymOff", asm: "MOVW", typ: "Mem", symEffect: "Write", hasSideEffects: true, faultOnNilArg0: true},
 +		{name: "DSB", argLength: 1, typ: "Mem", asm: "DSB", hasSideEffects: true},
++		{name: "DMB_ST", argLength: 1, typ: "Mem", asm: "DMB", hasSideEffects: true},
 +		{name: "LoadOnce8idx", argLength: 3, reg: gp2load, asm: "MOVB", typ: "(UInt8,Mem)", hasSideEffects: true, faultOnNilArg0: true},
 +		{name: "LoadOnce16idx", argLength: 3, reg: gp2load, asm: "MOVH", typ: "(UInt16,Mem)", hasSideEffects: true, faultOnNilArg0: true},
 +		{name: "LoadOnce32idx", argLength: 3, reg: gp2load, asm: "MOVW", typ: "(UInt32,Mem)", hasSideEffects: true, faultOnNilArg0: true},
@@ -2867,10 +2887,10 @@ index 0000000000..a48436e147
 +	})
 +}
 diff --git a/src/cmd/compile/internal/ssa/gen/genericOps.go b/src/cmd/compile/internal/ssa/gen/genericOps.go
-index 8933aa51ef..ccba0d3f35 100644
+index 8933aa51ef..51f443762a 100644
 --- a/src/cmd/compile/internal/ssa/gen/genericOps.go
 +++ b/src/cmd/compile/internal/ssa/gen/genericOps.go
-@@ -553,6 +553,16 @@ var genericOps = []opData{
+@@ -553,6 +553,19 @@ var genericOps = []opData{
  	{name: "AtomicAdd32Variant", argLength: 3, typ: "(UInt32,Mem)", hasSideEffects: true}, // Do *arg0 += arg1.  arg2=memory.  Returns sum and new memory.
  	{name: "AtomicAdd64Variant", argLength: 3, typ: "(UInt64,Mem)", hasSideEffects: true}, // Do *arg0 += arg1.  arg2=memory.  Returns sum and new memory.
  
@@ -2884,11 +2904,14 @@ index 8933aa51ef..ccba0d3f35 100644
 +	{name: "MMIOStore8", argLength: 3, typ: "Mem", hasSideEffects: true},
 +	{name: "MMIOMB", argLength: 1, typ: "Mem", hasSideEffects: true},
 +
++	// Publication barrier
++	{name: "PublicationBarrier", argLength: 1, typ: "Mem", hasSideEffects: true},
++
  	// Clobber experiment op
  	{name: "Clobber", argLength: 0, typ: "Void", aux: "SymOff", symEffect: "None"}, // write an invalid pointer value to the given pointer slot of a stack variable
  }
 diff --git a/src/cmd/compile/internal/ssa/opGen.go b/src/cmd/compile/internal/ssa/opGen.go
-index 00e49c97b7..68c8e0fbdf 100644
+index 00e49c97b7..b815d8d649 100644
 --- a/src/cmd/compile/internal/ssa/opGen.go
 +++ b/src/cmd/compile/internal/ssa/opGen.go
 @@ -9,6 +9,7 @@ import (
@@ -2935,7 +2958,7 @@ index 00e49c97b7..68c8e0fbdf 100644
  	BlockPlain:  "Plain",
  	BlockIf:     "If",
  	BlockDefer:  "Defer",
-@@ -2082,6 +2105,237 @@ const (
+@@ -2082,6 +2105,238 @@ const (
  	OpS390XLoweredMove
  	OpS390XLoweredZero
  
@@ -3126,6 +3149,7 @@ index 00e49c97b7..68c8e0fbdf 100644
 +	OpThumbStoreOnce16
 +	OpThumbStoreOnce32
 +	OpThumbDSB
++	OpThumbDMB_ST
 +	OpThumbLoadOnce8idx
 +	OpThumbLoadOnce16idx
 +	OpThumbLoadOnce32idx
@@ -3173,7 +3197,7 @@ index 00e49c97b7..68c8e0fbdf 100644
  	OpWasmLoweredStaticCall
  	OpWasmLoweredClosureCall
  	OpWasmLoweredInterCall
-@@ -2531,6 +2785,13 @@ const (
+@@ -2531,6 +2786,14 @@ const (
  	OpAtomicOr8
  	OpAtomicAdd32Variant
  	OpAtomicAdd64Variant
@@ -3184,10 +3208,11 @@ index 00e49c97b7..68c8e0fbdf 100644
 +	OpMMIOStore16
 +	OpMMIOStore8
 +	OpMMIOMB
++	OpPublicationBarrier
  	OpClobber
  )
  
-@@ -27596,411 +27857,3555 @@ var opcodeTable = [...]opInfo{
+@@ -27596,411 +27859,3562 @@ var opcodeTable = [...]opInfo{
  		},
  	},
  	{
@@ -6353,6 +6378,13 @@ index 00e49c97b7..68c8e0fbdf 100644
 +		reg:            regInfo{},
 +	},
 +	{
++		name:           "DMB_ST",
++		argLen:         1,
++		hasSideEffects: true,
++		asm:            thumb.ADMB,
++		reg:            regInfo{},
++	},
++	{
 +		name:           "LoadOnce8idx",
 +		argLen:         3,
 +		faultOnNilArg0: true,
@@ -7109,7 +7141,7 @@ index 00e49c97b7..68c8e0fbdf 100644
  		},
  	},
  
-@@ -31118,6 +34523,48 @@ var opcodeTable = [...]opInfo{
+@@ -31118,6 +34532,54 @@ var opcodeTable = [...]opInfo{
  		hasSideEffects: true,
  		generic:        true,
  	},
@@ -7155,10 +7187,16 @@ index 00e49c97b7..68c8e0fbdf 100644
 +		hasSideEffects: true,
 +		generic:        true,
 +	},
++	{
++		name:           "PublicationBarrier",
++		argLen:         1,
++		hasSideEffects: true,
++		generic:        true,
++	},
  	{
  		name:      "Clobber",
  		auxType:   auxSymOff,
-@@ -31545,6 +34992,46 @@ var fpRegMaskS390X = regMask(4294901760)
+@@ -31545,6 +35007,46 @@ var fpRegMaskS390X = regMask(4294901760)
  var specialRegMaskS390X = regMask(0)
  var framepointerRegS390X = int8(-1)
  var linkRegS390X = int8(14)
@@ -7243,10 +7281,10 @@ index cd23fe87e5..0f0b07e39b 100644
  	return false
 diff --git a/src/cmd/compile/internal/ssa/rewriteThumb.go b/src/cmd/compile/internal/ssa/rewriteThumb.go
 new file mode 100644
-index 0000000000..099bf3dcb1
+index 0000000000..8237f52862
 --- /dev/null
 +++ b/src/cmd/compile/internal/ssa/rewriteThumb.go
-@@ -0,0 +1,22688 @@
+@@ -0,0 +1,22701 @@
 +// Code generated from gen/Thumb.rules; DO NOT EDIT.
 +// generated with: cd gen; go run *.go
 +
@@ -7574,6 +7612,8 @@ index 0000000000..099bf3dcb1
 +		return rewriteValueThumb_OpPanicBounds_0(v)
 +	case OpPanicExtend:
 +		return rewriteValueThumb_OpPanicExtend_0(v)
++	case OpPublicationBarrier:
++		return rewriteValueThumb_OpPublicationBarrier_0(v)
 +	case OpRotateLeft16:
 +		return rewriteValueThumb_OpRotateLeft16_0(v)
 +	case OpRotateLeft32:
@@ -10914,6 +10954,17 @@ index 0000000000..099bf3dcb1
 +		return true
 +	}
 +	return false
++}
++func rewriteValueThumb_OpPublicationBarrier_0(v *Value) bool {
++	// match: (PublicationBarrier mem)
++	// cond:
++	// result: (DMB_ST mem)
++	for {
++		mem := v.Args[0]
++		v.reset(OpThumbDMB_ST)
++		v.AddArg(mem)
++		return true
++	}
 +}
 +func rewriteValueThumb_OpRotateLeft16_0(v *Value) bool {
 +	b := v.Block
@@ -30081,10 +30132,10 @@ index 0000000000..66317b9c72
 +}
 diff --git a/src/cmd/compile/internal/thumb/ssa.go b/src/cmd/compile/internal/thumb/ssa.go
 new file mode 100644
-index 0000000000..80a9baea70
+index 0000000000..52ba0fca2b
 --- /dev/null
 +++ b/src/cmd/compile/internal/thumb/ssa.go
-@@ -0,0 +1,899 @@
+@@ -0,0 +1,903 @@
 +// Copyright 2016 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -30889,6 +30940,10 @@ index 0000000000..80a9baea70
 +		// TODO: implement for clobberdead experiment. Nop is ok for now.
 +	case ssa.OpThumbDSB:
 +		s.Prog(thumb.ADSB)
++	case ssa.OpThumbDMB_ST:
++		p := s.Prog(thumb.ADMB)
++		p.From.Type = obj.TYPE_REG
++		p.From.Reg = thumb.REG_MB_ST
 +	default:
 +		v.Fatalf("genValue not implemented: %s", v.LongString())
 +	}
@@ -49045,6 +49100,18 @@ index 0000000000..29bba9b979
 +
 +//func (b UM8) LoadVal() int   { return b.R.Field(uint8(b.Mask)) }
 +//func (b UM8) StoreVal(v int) { b.R.SetField(b.Mask, v) }
+diff --git a/src/embedded/rtos/asm_thumb.s b/src/embedded/rtos/asm_thumb.s
+new file mode 100644
+index 0000000000..4433a7fdab
+--- /dev/null
++++ b/src/embedded/rtos/asm_thumb.s
+@@ -0,0 +1,6 @@
++#include "textflag.h"
++
++// func publicationBarrier()
++TEXT ·publicationBarrier(SB),NOSPLIT|NOFRAME,$0-0
++	DMB  MB_ST // must be system wide
++	RET
 diff --git a/src/embedded/rtos/errors.go b/src/embedded/rtos/errors.go
 new file mode 100644
 index 0000000000..a5681609f1
@@ -49274,7 +49341,7 @@ index 0000000000..1e9aebcd2c
 +func time_sleep(ns int64)
 diff --git a/src/embedded/rtos/note.go b/src/embedded/rtos/note.go
 new file mode 100644
-index 0000000000..88e71c6f85
+index 0000000000..96ee4d3212
 --- /dev/null
 +++ b/src/embedded/rtos/note.go
 @@ -0,0 +1,40 @@
@@ -49308,22 +49375,22 @@ index 0000000000..88e71c6f85
 +// Wakeup wakeups the goroutine that sleeps or will try to sleep on the note.
 +func (n *Note) Wakeup() { notewakeup(n) }
 +
-+// Clear clears the note. It also behaves as full memory barrier in a way that
-+// the Clear itself and any memory access preceding it in the program order
-+// happens before any memory access that follows it.
-+func (n *Note) Clear() { atomic_Storeuintptr(&n.key, 0) }
++// Clear clears the note. It also works as publication barrier in a way that
++// the Clear itself and any memory writes preceding it in the program order
++// happens before any memory writes that follows it.
++func (n *Note) Clear() {
++	n.key = 0
++	publicationBarrier()
++}
 +
 +//go:linkname runtime_notetsleepg runtime.notetsleepg
 +func runtime_notetsleepg(n *Note, ns int64) bool
-+
-+//go:linkname atomic_Storeuintptr runtime/internal/atomic.Storeuintptr
-+func atomic_Storeuintptr(p *uintptr, v uintptr)
 diff --git a/src/embedded/rtos/note_noos.go b/src/embedded/rtos/note_noos.go
 new file mode 100644
-index 0000000000..6dea67f487
+index 0000000000..6ac4aad4ae
 --- /dev/null
 +++ b/src/embedded/rtos/note_noos.go
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,12 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49334,12 +49401,15 @@ index 0000000000..6dea67f487
 +
 +//go:linkname notewakeup runtime.notelwakeup
 +func notewakeup(n *Note)
++
++func publicationBarrier()
+\ No newline at end of file
 diff --git a/src/embedded/rtos/note_os.go b/src/embedded/rtos/note_os.go
 new file mode 100644
-index 0000000000..a2e4143c73
+index 0000000000..51a42abc2c
 --- /dev/null
 +++ b/src/embedded/rtos/note_os.go
-@@ -0,0 +1,12 @@
+@@ -0,0 +1,15 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49352,6 +49422,10 @@ index 0000000000..a2e4143c73
 +
 +//go:linkname notewakeup runtime.notewakeup
 +func notewakeup(n *Note)
++
++//go:linkname publicationBarrier runtime.publicationBarrier
++func publicationBarrier()
+\ No newline at end of file
 diff --git a/src/embedded/rtos/privlevel.go b/src/embedded/rtos/privlevel.go
 new file mode 100644
 index 0000000000..c442decfe5
@@ -56291,10 +56365,10 @@ index 30ec5f1cc9..6f8da43b72 100644
  // scanning the allocation bitmap.
 diff --git a/src/runtime/mem_noos.go b/src/runtime/mem_noos.go
 new file mode 100644
-index 0000000000..1c33b18930
+index 0000000000..958c78fb47
 --- /dev/null
 +++ b/src/runtime/mem_noos.go
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,130 @@
 +// Copyright 2018 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -56341,6 +56415,7 @@ index 0000000000..1c33b18930
 +//go:nosplit
 +func (m *pamem) alloc(size, align uintptr) unsafe.Pointer {
 +	var p uintptr
++	align-- // align must be power of two
 +	astart := (m.start + align) &^ align
 +	if m.end-astart >= size {
 +		p = astart
