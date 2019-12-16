@@ -31257,7 +31257,7 @@ index d2cec734b1..1b9975754b 100644
  )
 diff --git a/src/cmd/internal/obj/thumb/a.out.go b/src/cmd/internal/obj/thumb/a.out.go
 new file mode 100644
-index 0000000000..b74d6b8d3c
+index 0000000000..1012d10333
 --- /dev/null
 +++ b/src/cmd/internal/obj/thumb/a.out.go
 @@ -0,0 +1,500 @@
@@ -31379,7 +31379,7 @@ index 0000000000..b74d6b8d3c
 +	// R13 23314
 +	// R14 44902
 +	// R15 6227
-+	// Drawback: incompatible with arm assembly that use R7.
++	// Drawback: incompatible with arm assembly that use R11.
 +
 +	REGTMP  = REG_R7  // reserved for compiler and linker
 +	REGG    = REG_R10 // pointer to goroutine structure (g)
@@ -33190,7 +33190,7 @@ index 0000000000..8e44386b89
 \ No newline at end of file
 diff --git a/src/cmd/internal/obj/thumb/instr_group.txt b/src/cmd/internal/obj/thumb/instr_group.txt
 new file mode 100644
-index 0000000000..391f085d99
+index 0000000000..bebbfa2797
 --- /dev/null
 +++ b/src/cmd/internal/obj/thumb/instr_group.txt
 @@ -0,0 +1,259 @@
@@ -33406,7 +33406,7 @@ index 0000000000..391f085d99
 +	1110 1000 10w0 nnnn  0r0r rrrr rrrr rrrr  .MOVM.IA.w reglist, (Rn)
 +	1110 1001 00w0 nnnn  0r0r rrrr rrrr rrrr  .MOVM.DB.w reglist, (Rn)   ; .W,n=13 -> PUSH
 +
-+	1011 110r rrrr rrrr                       .MOVM.IA.w (R13), reglist  ; POP [R0-R7,R14]
++	1011 110r rrrr rrrr                       .MOVM.IA.W (R13), reglist  ; POP [R0-R7,R14]
 +	1100 1nnn rrrr rrrr                       .MOVM.IA.W (Rn), reglist
 +	1110 1000 10w1 nnnn  rr0r rrrr rrrr rrrr  .MOVM.IA.w (Rn), reglist   ; .W,n=13 -> POP
 +	1110 1001 00w1 nnnn  rr0r rrrr rrrr rrrr  .MOVM.DB.w (Rn), reglist
@@ -48346,10 +48346,10 @@ index 0000000000..cf2cf67b41
 +	RET
 diff --git a/src/embedded/arch/cortexm/systim/asm_thumb.s b/src/embedded/arch/cortexm/systim/asm_thumb.s
 new file mode 100644
-index 0000000000..826d16d5b4
+index 0000000000..045ca88ace
 --- /dev/null
 +++ b/src/embedded/arch/cortexm/systim/asm_thumb.s
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,26 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -48375,17 +48375,13 @@ index 0000000000..826d16d5b4
 +	ADD   $1, R1
 +	MOVW  R1, 4(R0)
 +
-+	// ensure that the change in PendSV pending bit and both halves of
-+	// streloadcnt are all observable for pendsvHandler and svcallHandler
-+	DMB
-+
 +	RET
 diff --git a/src/embedded/arch/cortexm/systim/systim_thumb.go b/src/embedded/arch/cortexm/systim/systim_thumb.go
 new file mode 100644
-index 0000000000..e0b7abeea2
+index 0000000000..363716df9c
 --- /dev/null
 +++ b/src/embedded/arch/cortexm/systim/systim_thumb.go
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,75 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -48400,7 +48396,7 @@ index 0000000000..e0b7abeea2
 +package systim
 +
 +import (
-+	"internal/cpu/cortexm"
++	"embedded/rtos"
 +	"internal/cpu/cortexm/scb"
 +	"internal/cpu/cortexm/systick"
 +	_ "unsafe"
@@ -48447,10 +48443,8 @@ index 0000000000..e0b7abeea2
 +		systim.periodns = 0
 +		return
 +	}
-+	// Set SysTick exception priority in the middle ov available levels.
-+	scb.SCB().PRI_SysTick().Store(
-+		(cortexm.PrioLo + cortexm.PrioHi) / 2 << scb.PRI_SysTickn,
-+	)
++	// Set SysTick exception priority accortding to rtos package.
++	scb.SCB().PRI_SysTick().Store(255 - rtos.IntPrioSysTimer)
 +	systim.periodns = periodns
 +	systim.reloadcnt = 1 // ensure that nanotime never return zero
 +	periodtick := uint32((periodns*clkhz + 5e8) / 1e9)
@@ -49169,38 +49163,42 @@ index 0000000000..211958dc58
 +}
 diff --git a/src/embedded/rtos/irq.go b/src/embedded/rtos/irq.go
 new file mode 100644
-index 0000000000..1e428daf87
+index 0000000000..3a22eb0491
 --- /dev/null
 +++ b/src/embedded/rtos/irq.go
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,55 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
 +
 +package rtos
 +
-+// Package rtos defines a five well known interrupt priority levels ordered by
-+// increasing urgency as follows: IntPrioLowest, IRQPrioLow, IRQPrioSysTimer,
-+// IRQPrioHigh, IRQPrioHighest. There can be additional priority levels between
-+// the defined ones.
++// Package rtos defines a seven well known interrupt priority levels ordered by
++// increasing urgency as follows: IntPrioLowest, IntPrioLow, IntPrioSysCall,
++// IntPrioMid, IntPrioSysTimer, IntPrioHigh, IntPrioHighest. There can be
++// additional priority levels between the defined ones and some can have the
++// same level. You can use ordinary equality operators to compare priority
++// levels.
 +//
-+// You can use ordinary equality operators to compare priority levels. The
-+// numeric values of the defined priority levels satisfy the following
-+// inequality:
++// The architecture specific code should provide (if possible) at least four
++// different real priority levels so the defined levels can satisfy the
++// following inequality:
 +//
-+// IntPrioLowest <= IntPrioLow < IRQPrioSysTimer < IRQPrioHigh <= IRQPrioHighest
++// Lowest <= Low < SysCall < IntPrioMid <= SysTimer < High <= Highest
 +//
 +// Architecture that supports interrupt nesting must ensure that the incoming
 +// interrupt request can not preempt the interrupt handler that runs with the
 +// same or higher priority.
 +const (
-+	IntPrioLowest   int = intPrioLowest
-+	IntPrioLow      int = intPrioLow
-+	IntPrioSysTimer int = intPrioSysTimer
-+	IntPrioHigh     int = intPrioHigh
-+	IntPrioHighest  int = intPrioHighest
++	IntPrioHighest  = intPrioHighest
++	IntPrioHigh     = intPrioHigh
++	IntPrioSysTimer = intPrioSysTimer
++	IntPrioMid      = intPrioMid
++	IntPrioSysCall  = intPrioSysCall
++	IntPrioLow      = intPrioLow
++	IntPrioLowest   = intPrioLowest
 +
-+	IntPrioCurrent int = intPrioCurrent // do not change the current priority
++	IntPrioCurrent = intPrioCurrent
 +)
 +
 +// IRQ represents an user accessible interrupt. It provides interface to basic
@@ -49226,10 +49224,10 @@ index 0000000000..1e428daf87
 +}
 diff --git a/src/embedded/rtos/irq_noos.go b/src/embedded/rtos/irq_noos.go
 new file mode 100644
-index 0000000000..d2ec0cbd5e
+index 0000000000..0178dcd81a
 --- /dev/null
 +++ b/src/embedded/rtos/irq_noos.go
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,30 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49238,10 +49236,7 @@ index 0000000000..d2ec0cbd5e
 +
 +import _ "unsafe"
 +
-+const (
-+	intPrioCurrent = -1
-+	intPrioLowest  = 0
-+)
++const intPrioCurrent = -1
 +
 +func irqEnable(irq IRQ, prio int) error {
 +	if uint(prio+1) > intPrioHighest+1 {
@@ -49265,10 +49260,10 @@ index 0000000000..d2ec0cbd5e
 +func runtime_irqctl(irq, ctl int) (enabled, prio, errno int)
 diff --git a/src/embedded/rtos/irq_noos_thumb.go b/src/embedded/rtos/irq_noos_thumb.go
 new file mode 100644
-index 0000000000..29e0cc4283
+index 0000000000..1a9d84a8a7
 --- /dev/null
 +++ b/src/embedded/rtos/irq_noos_thumb.go
-@@ -0,0 +1,12 @@
+@@ -0,0 +1,16 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49276,17 +49271,21 @@ index 0000000000..29e0cc4283
 +package rtos
 +
 +const (
-+	intPrioLow      = intPrioHighest / 4
-+	intPrioSysTimer = intPrioHighest / 2
-+	intPrioHigh     = intPrioHighest * 3 / 4
-+	intPrioHighest  = 255
++	intPrioHighest  = 255 - 0<<5 // do not use with nRF52 SoftDevice
++	intPrioHigh     = 255 - 1<<5
++	intPrioSysTimer = 255 - 2<<5
++	intPrioMid      = 255 - 3<<5
++	intPrioSysCall  = 255 - 4<<5 // compatible with nRF52 SoftDevice
++	intPrioLow      = 255 - 5<<5
++	intPrioLowest   = 255 - 6<<5
++	intPrioPendSV   = 255 - 255 // unusable because can not wake the scheduler
 +)
 diff --git a/src/embedded/rtos/irq_x.go b/src/embedded/rtos/irq_x.go
 new file mode 100644
-index 0000000000..351d365546
+index 0000000000..dd3d98b380
 --- /dev/null
 +++ b/src/embedded/rtos/irq_x.go
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,30 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49296,12 +49295,14 @@ index 0000000000..351d365546
 +package rtos
 +
 +const (
-+	intPrioLowest   = 0
-+	intPrioLow      = 0
-+	intPrioSysTimer = 0
-+	intPrioHigh     = 0
 +	intPrioHighest  = 0
-+	intPrioCurrent  = 0
++	intPrioHigh     = 0
++	intPrioSysTimer = 0
++	intPrioMid      = 0
++	intPrioSysCall  = 0
++	intPrioLow      = 0
++	intPrioLowest   = 0
++	intPrioCurrent  = -1
 +)
 +
 +func irqEnable(irq IRQ, prio int) error {
@@ -50907,10 +50908,10 @@ index 0000000000..a8525c9f3b
 +package cortexm
 diff --git a/src/internal/cpu/cortexm/exce_thumb.go b/src/internal/cpu/cortexm/exce_thumb.go
 new file mode 100644
-index 0000000000..ee0d207ab2
+index 0000000000..9e0f637dd2
 --- /dev/null
 +++ b/src/internal/cpu/cortexm/exce_thumb.go
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,37 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -50938,12 +50939,6 @@ index 0000000000..ee0d207ab2
 +
 +// Exception number for the first external interrupt.
 +const IRQ0 = 16
-+
-+// Lowest and highest exception priority.
-+const (
-+	PrioLo = 255
-+	PrioHi = 0
-+)
 +
 +// EXC_RETURN fields
 +const (
@@ -51941,7 +51936,7 @@ index 0000000000..990699bad6
 \ No newline at end of file
 diff --git a/src/internal/cpu/cortexm/scb/periph_thumb.go b/src/internal/cpu/cortexm/scb/periph_thumb.go
 new file mode 100644
-index 0000000000..a83462a930
+index 0000000000..a9de6b48f3
 --- /dev/null
 +++ b/src/internal/cpu/cortexm/scb/periph_thumb.go
 @@ -0,0 +1,172 @@
@@ -51982,15 +51977,15 @@ index 0000000000..a83462a930
 +)
 +
 +const (
-+	VECTACTIVE  ICSR = 0x1ff << 0  //+
-+	RETTOBASE   ICSR = 1 << 11     //+
-+	VECTPENDING ICSR = 0x3ff << 12 //+
-+	ISRPENDING  ICSR = 1 << 22     //+
-+	PENDSTCLR   ICSR = 1 << 25     //+
-+	PENDSTSET   ICSR = 1 << 26     //+
-+	PENDSVCLR   ICSR = 1 << 27     //+
-+	PENDSVSET   ICSR = 1 << 28     //+
-+	NMIPENDSET  ICSR = 1 << 31     //+
++	VECTACTIVE  ICSR = 0x1ff << 0  //+ Active exception number (0: thread mode)
++	RETTOBASE   ICSR = 1 << 11     //+ No preempted active exceptions
++	VECTPENDING ICSR = 0x1ff << 12 //+ Highest priority pending exception number
++	ISRPENDING  ICSR = 1 << 22     //+ Int. pending flag, excluding NMI, Faults
++	PENDSTCLR   ICSR = 1 << 25     //+ SysTick exception clear-pending bit
++	PENDSTSET   ICSR = 1 << 26     //+ SysTick exception set-pending bit
++	PENDSVCLR   ICSR = 1 << 27     //+ PendSV clear-pending bit
++	PENDSVSET   ICSR = 1 << 28     //+ PendSV set-pending bit
++	NMIPENDSET  ICSR = 1 << 31     //+ NMI set-pending bit
 +)
 +
 +const (
@@ -52032,10 +52027,10 @@ index 0000000000..a83462a930
 +	UNALIGN_TRP    CCR = 1 << 3  //+
 +	DIV_0_TRP      CCR = 1 << 4  //+
 +	BFHFNMIGN      CCR = 1 << 8  //+
-+	STKALIGN       CCR = 1 << 9  //+ Stack 8 B aligned on exception entry.
-+	DC             CCR = 1 << 16 //+ Enable data cache.
-+	IC             CCR = 1 << 17 //+ Enable instruction cache.
-+	BP             CCR = 1 << 18 //+ Branch prediction is enabled.
++	STKALIGN       CCR = 1 << 9  //+ Stack 8 byte aligned on exception entry
++	DC             CCR = 1 << 16 //+ Enable data cache
++	IC             CCR = 1 << 17 //+ Enable instruction cache
++	BP             CCR = 1 << 18 //+ Branch prediction is enabled
 +)
 +
 +const (
@@ -56500,22 +56495,6 @@ index 0000000000..958c78fb47
 +func sysHugePage(v unsafe.Pointer, n uintptr) {}
 +
 +const mspanSize = unsafe.Sizeof(mspan{}) // used by assembly
-diff --git a/src/runtime/mem_os.go b/src/runtime/mem_os.go
-new file mode 100644
-index 0000000000..09d353ca9b
---- /dev/null
-+++ b/src/runtime/mem_os.go
-@@ -0,0 +1,10 @@
-+// Copyright 2019 The Go Authors. All rights reserved.
-+// Use of this source code is governed by a BSD-style
-+// license that can be found in the LICENSE file.
-+
-+// +build !noos
-+
-+package runtime
-+
-+func sysReserveMaxArena() (addr, size uintptr)                           { return 0, 0 }
-+func sysPersistentAlloc(size, align uintptr, sysStat *uint64) *notInHeap { return nil }
 diff --git a/src/runtime/memclr_thumb.s b/src/runtime/memclr_thumb.s
 new file mode 100644
 index 0000000000..ea3c67afc5
@@ -58014,10 +57993,10 @@ index 0000000000..fa1b62ef6b
 +}
 diff --git a/src/runtime/os_noos.go b/src/runtime/os_noos.go
 new file mode 100644
-index 0000000000..0b5347c313
+index 0000000000..0aa9f3b82d
 --- /dev/null
 +++ b/src/runtime/os_noos.go
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,112 @@
 +// Copyright 2018 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -58095,8 +58074,13 @@ index 0000000000..0b5347c313
 +
 +//go:nosplit
 +func osinit() {
-+	ncpu = 1
++	ncpu = 1 // for now only single CPU is supported (see identcurcpu, cpuid)
 +	physPageSize = _PageSize
++}
++
++//go:nosplit
++func isr() bool {
++	return getg() == &thetasker.allcpu[cpuid()].gh
 +}
 +
 +func setsystim1()
@@ -58127,10 +58111,10 @@ index 0000000000..0b5347c313
 +func nanosleep(ns int64)
 diff --git a/src/runtime/os_noos_thumb.go b/src/runtime/os_noos_thumb.go
 new file mode 100644
-index 0000000000..6c7fd3c1c3
+index 0000000000..34c95fac83
 --- /dev/null
 +++ b/src/runtime/os_noos_thumb.go
-@@ -0,0 +1,12 @@
+@@ -0,0 +1,18 @@
 +// Copyright 2009 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -58142,6 +58126,12 @@ index 0000000000..6c7fd3c1c3
 +	// Currently cputicks() is used in blocking profiler and to seed fastrand().
 +	// nanotime() is a poor approximation of CPU ticks that is enough for the profiler.
 +	return nanotime()
++}
++
++//go:nosplit
++func cpuid() int {
++	// for now only single CPU is supported (see also identcurcpu, osinit)
++	return 0
 +}
 diff --git a/src/runtime/panic.go b/src/runtime/panic.go
 index 5f33cd7c0c..7db15cf78b 100644
@@ -58168,7 +58158,7 @@ index b89ce9d563..1b23ff1a29 100644
  package runtime
  
 diff --git a/src/runtime/print.go b/src/runtime/print.go
-index e605eb34cb..fbde77f4d8 100644
+index e605eb34cb..62e0312b79 100644
 --- a/src/runtime/print.go
 +++ b/src/runtime/print.go
 @@ -26,7 +26,7 @@ func bytes(s string) (ret []byte) {
@@ -58180,7 +58170,27 @@ index e605eb34cb..fbde77f4d8 100644
  	printBacklogIndex int
  )
  
-@@ -196,7 +196,7 @@ func printcomplex(c complex128) {
+@@ -64,6 +64,9 @@ var debuglock mutex
+ // For both these reasons, let a thread acquire the printlock 'recursively'.
+ 
+ func printlock() {
++	if isr() {
++		return
++	}
+ 	mp := getg().m
+ 	mp.locks++ // do not reschedule between printlock++ and lock(&debuglock).
+ 	mp.printlock++
+@@ -74,6 +77,9 @@ func printlock() {
+ }
+ 
+ func printunlock() {
++	if isr() {
++		return
++	}
+ 	mp := getg().m
+ 	mp.printlock--
+ 	if mp.printlock == 0 {
+@@ -196,7 +202,7 @@ func printcomplex(c complex128) {
  }
  
  func printuint(v uint64) {
@@ -58189,7 +58199,7 @@ index e605eb34cb..fbde77f4d8 100644
  	i := len(buf)
  	for i--; i > 0; i-- {
  		buf[i] = byte(v%10 + '0')
-@@ -218,7 +218,7 @@ func printint(v int64) {
+@@ -218,7 +224,7 @@ func printint(v int64) {
  
  func printhex(v uint64) {
  	const dig = "0123456789abcdef"
@@ -59390,6 +59400,31 @@ index c13bf16de2..1181174589 100644
  package runtime
  
  // Called from compiler-generated code; declared for go vet.
+diff --git a/src/runtime/stubs_os.go b/src/runtime/stubs_os.go
+new file mode 100644
+index 0000000000..68ebc4ebfc
+--- /dev/null
++++ b/src/runtime/stubs_os.go
+@@ -0,0 +1,19 @@
++// Copyright 2014 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++// +build !noos
++
++package runtime
++
++func isr() bool {
++	return false
++}
++
++func sysReserveMaxArena() (addr, size uintptr) {
++	return 0, 0
++}
++
++func sysPersistentAlloc(size, align uintptr, sysStat *uint64) *notInHeap {
++	return nil
++}
 diff --git a/src/runtime/sys_arm.go b/src/runtime/sys_armt.go
 similarity index 96%
 rename from src/runtime/sys_arm.go
@@ -60003,10 +60038,10 @@ index 0000000000..16461e44f9
 +	RET  
 diff --git a/src/runtime/sys_noos_thumb.s b/src/runtime/sys_noos_thumb.s
 new file mode 100644
-index 0000000000..c27ad5dd02
+index 0000000000..bd25fa07b4
 --- /dev/null
 +++ b/src/runtime/sys_noos_thumb.s
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,148 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -60016,28 +60051,26 @@ index 0000000000..c27ad5dd02
 +#include "textflag.h"
 +#include "syscall_noos.h"
 +
-+DATA runtime·syscalls+(SYS_setsystim1*4)(SB)/4, $·syssetsystim1(SB)
++// if you add new syscall you must check SYS_MAX_ARGS in tasker_noos_thumb.s
++
++// syscalls allowed for low priority interrupt handlers
 +DATA runtime·syscalls+(SYS_nanotime*4)(SB)/4, $·sysnanotime(SB)
++DATA runtime·syscalls+(SYS_walltime*4)(SB)/4, $·syswalltime(SB)
++DATA runtime·syscalls+(SYS_setwalltime*4)(SB)/4, $·syssetwalltime(SB)
++DATA runtime·syscalls+(SYS_irqctl*4)(SB)/4, $·sysirqctl(SB)
++DATA runtime·syscalls+(SYS_setprivlevel*4)(SB)/4, $·syssetprivlevel(SB)
++DATA runtime·syscalls+(SYS_write*4)(SB)/4, $·syswrite(SB)
++
++// syscalls disallowed for low priority interrupt handlers
++DATA runtime·syscalls+(SYS_setsystim1*4)(SB)/4, $·syssetsystim1(SB)
 +DATA runtime·syscalls+(SYS_newosproc*4)(SB)/4, $·sysnewosproc(SB)
 +DATA runtime·syscalls+(SYS_exitThread*4)(SB)/4, $·sysexitThread(SB)
 +DATA runtime·syscalls+(SYS_futexsleep*4)(SB)/4, $·sysfutexsleep(SB)
 +DATA runtime·syscalls+(SYS_futexwakeup*4)(SB)/4, $·sysfutexwakeup(SB)
 +DATA runtime·syscalls+(SYS_osyield*4)(SB)/4, $·curcpuSchedule(SB)
 +DATA runtime·syscalls+(SYS_nanosleep*4)(SB)/4, $·sysnanosleep(SB)
-+DATA runtime·syscalls+(SYS_walltime*4)(SB)/4, $·syswalltime(SB)
-+DATA runtime·syscalls+(SYS_setwalltime*4)(SB)/4, $·syssetwalltime(SB)
-+DATA runtime·syscalls+(SYS_write*4)(SB)/4, $·syswrite(SB)
-+DATA runtime·syscalls+(SYS_setprivlevel*4)(SB)/4, $·syssetprivlevel(SB)
-+DATA runtime·syscalls+(SYS_irqctl*4)(SB)/4, $·sysirqctl(SB)
-+GLOBL runtime·syscalls(SB), RODATA, $(SYS_NUM*4)
 +
-+// func setsystim1()
-+TEXT ·setsystim1(SB),NOSPLIT|NOFRAME,$0-0
-+	MOVW  $SYS_setsystim1, R4
-+	MOVW  $(0+4), R5
-+	MOVW  $0, R6
-+	SWI
-+	RET
++GLOBL runtime·syscalls(SB), RODATA, $(SYS_NUM*4)
 +
 +// func nanotime() int64
 +TEXT ·nanotime(SB),NOSPLIT|NOFRAME,$0-8
@@ -60047,6 +60080,55 @@ index 0000000000..c27ad5dd02
 +	SWI
 +	RET
 +
++// func walltime() (sec int64, nsec int32)
++TEXT ·walltime(SB),NOSPLIT|NOFRAME,$0-12
++	MOVW  $SYS_walltime, R4
++	MOVW  $(0+4), R5
++	MOVW  $12, R6
++	SWI
++	RET
++
++// func setwalltime(sec int64, nsec int32)
++TEXT ·setwalltime(SB),NOSPLIT|NOFRAME,$0-12
++	MOVW  $SYS_setwalltime, R4
++	MOVW  $(12+4), R5
++	MOVW  $0, R6
++	SWI
++	RET
++
++// func irqctl(irq, ctl int) (enabled, prio, errno int)
++TEXT ·irqctl(SB),NOSPLIT|NOFRAME,$0-20
++	MOVW  $SYS_irqctl, R4
++	MOVW  $(8+4), R5
++	MOVW  $12, R6
++	SWI
++	RET
++
++// func setprivlevel(newlevel int) (oldlevel, errno int)
++TEXT ·setprivlevel(SB),NOSPLIT|NOFRAME,$0-12
++	MOVW  $SYS_setprivlevel, R4
++	MOVW  $(4+4), R5
++	MOVW  $8, R6
++	SWI
++	RET
++
++// func write(fd uintptr, p unsafe.Pointer, n int32) int32
++TEXT ·write(SB),NOSPLIT|NOFRAME,$0-16
++	MOVW  $SYS_write, R4
++	MOVW  $(12+4), R5
++	MOVW  $4, R6
++	SWI
++	RET
++
++// func setsystim1()
++TEXT ·setsystim1(SB),NOSPLIT|NOFRAME,$0-0
++	MOVW  $SYS_setsystim1, R4
++	MOVW  $(0+4), R5
++	MOVW  $0, R6
++	SWI
++	RET
++
++
 +// func newosproc(mp *m)
 +TEXT ·newosproc(SB),NOSPLIT|NOFRAME,$0-4
 +	MOVW  $SYS_newosproc, R4
@@ -60054,11 +60136,6 @@ index 0000000000..c27ad5dd02
 +	MOVW  $0, R6
 +	SWI
 +	RET
-+
-+// func exit(r int32)
-+TEXT ·exit(SB),NOSPLIT|NOFRAME,$0-4
-+	BKPT
-+	B   -1(PC)
 +
 +// func exitThread(wait *uint32)
 +TEXT ·exitThread(SB),NOSPLIT|NOFRAME,$0-4
@@ -60092,11 +60169,6 @@ index 0000000000..c27ad5dd02
 +	SWI
 +	RET
 +
-+// func publicationBarrier()
-+TEXT ·publicationBarrier(SB),NOSPLIT|NOFRAME,$0-0
-+	DMB  MB_ST
-+	RET
-+
 +// func nanosleep(ns int64)
 +TEXT ·nanosleep(SB),NOSPLIT|NOFRAME,$0-8
 +	MOVW  $SYS_nanosleep, R4
@@ -60105,75 +60177,58 @@ index 0000000000..c27ad5dd02
 +	SWI
 +	RET
 +
-+// func walltime() (sec int64, nsec int32)
-+TEXT ·walltime(SB),NOSPLIT|NOFRAME,$0-12
-+	MOVW  $SYS_walltime, R4
-+	MOVW  $(0+4), R5
-+	MOVW  $12, R6
-+	SWI
-+	RET
++// unsupported syscalls
 +
-+// func setwalltime(sec int64, nsec int32)
-+TEXT ·setwalltime(SB),NOSPLIT|NOFRAME,$0-12
-+	MOVW  $SYS_setwalltime, R4
-+	MOVW  $(12+4), R5
-+	MOVW  $0, R6
-+	SWI
-+	RET
++// func exit(r int32)
++TEXT ·exit(SB),NOSPLIT|NOFRAME,$0-4
++	BKPT
++	B   -1(PC)
 +
-+// func write(fd uintptr, p unsafe.Pointer, n int32) int32
-+TEXT ·write(SB),NOSPLIT|NOFRAME,$0-16
-+	MOVW  $SYS_write, R4
-+	MOVW  $(12+4), R5
-+	MOVW  $4, R6
-+	SWI
-+	RET
++// utils
 +
-+// func setprivlevel(newlevel int) (oldlevel, errno int)
-+TEXT ·setprivlevel(SB),NOSPLIT|NOFRAME,$0-8
-+	MOVW  $SYS_setprivlevel, R4
-+	MOVW  $(4+4), R5
-+	MOVW  $8, R6
-+	SWI
-+	RET
-+
-+// func irqctl(irq, ctl int) (enabled, prio, errno int)
-+TEXT ·irqctl(SB),NOSPLIT|NOFRAME,$0-12
-+	MOVW  $SYS_irqctl, R4
-+	MOVW  $(8+4), R5
-+	MOVW  $12, R6
-+	SWI
++// func publicationBarrier()
++TEXT ·publicationBarrier(SB),NOSPLIT|NOFRAME,$0-0
++	DMB  MB_ST
 +	RET
 diff --git a/src/runtime/syscall_noos.h b/src/runtime/syscall_noos.h
 new file mode 100644
-index 0000000000..6ade267166
+index 0000000000..e314346b1f
 --- /dev/null
 +++ b/src/runtime/syscall_noos.h
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,27 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
 +
-+#define SYS_setsystim1     0
-+#define SYS_nanotime       1
-+#define SYS_newosproc      2
-+#define SYS_exitThread     3
-+#define SYS_futexsleep     4
-+#define SYS_futexwakeup    5
-+#define SYS_osyield        6
-+#define SYS_nanosleep         7
-+#define SYS_walltime       8
-+#define SYS_setwalltime    9
-+#define SYS_write         10
-+#define SYS_setprivlevel  11
-+#define SYS_irqctl        12
-+#define SYS_NUM           13
++// Some syscalls are alowed to be called by low priority interrupt handlers.
++//
++// Other syscalls, that can't run concurently with the scheduler, are available
++// only to threads.
++
++#define SYS_nanotime      0
++#define SYS_walltime      1
++#define SYS_setwalltime   2
++#define SYS_irqctl        3
++#define SYS_setprivlevel  4
++#define SYS_write         5
++
++#define SYS_LAST_LOWISR   5 
++
++#define SYS_setsystim1    6
++#define SYS_newosproc     7
++#define SYS_exitThread    8
++#define SYS_futexsleep    9
++#define SYS_futexwakeup  10
++#define SYS_osyield      11
++#define SYS_nanosleep    12
++
++#define SYS_NUM          13
 diff --git a/src/runtime/tasker_noos.go b/src/runtime/tasker_noos.go
 new file mode 100644
-index 0000000000..a100bfc91c
+index 0000000000..c7330301a0
 --- /dev/null
 +++ b/src/runtime/tasker_noos.go
-@@ -0,0 +1,544 @@
+@@ -0,0 +1,517 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -60229,7 +60284,7 @@ index 0000000000..a100bfc91c
 +// will not happen (to avoid race condition). It is allowed that both of these
 +// functions do nothing.
 +//
-+// curcpuSavectx
++// curcpuSavectxCall, curcpuSavectxSched
 +//
 +// This function is called to save the remaining context, not saved at syscall
 +// entry (eg. it can save FPU state).
@@ -60237,12 +60292,16 @@ index 0000000000..a100bfc91c
 +// archnewm
 +//
 +// This function is called to create the inintial state of the new thread and
-+// save it in provided m so the curcpuSchedule can later switch the CPU to it.
++// save it in provided m so the curcpuEnterScheduler can later switch the CPU to
++// it.
++//
++// curcpuSchedule
++//
++// Run scheduler immediately or at syscall exit.
 +//
 +// The actual context switch is performed by architecture specific code at
-+// syscall exit or by system timer handler. It should check the cpuctx.newexe
-+// variable and if it is true, switch the context to the new thread specified in
-+// cpuctx.exe.
++// curcpuRunScheduler exit. It should check the cpuctx.newexe variable and if
++// it is not nil, switch the context to the new thread specified in cpuctx.exe.
 +//
 +// Tasker code does not use FPU so the architecture specific context switch
 +// code can avoid saving/restoring FPU context if not need.
@@ -60258,7 +60317,7 @@ index 0000000000..a100bfc91c
 +	gh       g               // for ISRs, must be the first field in this struct
 +	t        *tasker         // points to thetasker
 +	exe      muintptr        // m currently executed by CPU
-+	newexe   bool            // information for architecture-dependent code
++	newexe   bool            // for architecture-dependent code: exe changed
 +	runnable mq              // threads in runnable state
 +	waitingt msl             // threads waiting until some time elapses
 +	wakerq   [fbnum]notelist // futex wakeup request from interrupt handlers
@@ -60292,12 +60351,13 @@ index 0000000000..a100bfc91c
 +}
 +
 +// gh is the first field of the cpuctx so we can benefit from the getg which is
-+// intrinsic function, often compiled to 0 or 1 instruction.
++// intrinsic function, often compiled to 0 or 1 instruction. Don't call in
++// thread mode (valid only in handler mode).
 +//go:nosplit
 +func getcpuctx() *cpuctx { return (*cpuctx)(unsafe.Pointer(getg())) }
 +
 +//go:nosplit
-+func taskerSetrunnable(m *m) *cpuctx {
++func taskerSetrunnable(m *m) {
 +	curcpu := getcpuctx()
 +	allcpu := curcpu.t.allcpu
 +	var (
@@ -60335,11 +60395,10 @@ index 0000000000..a100bfc91c
 +	if bestcpu != curcpu {
 +		bestcpu.wakeup()
 +	}
-+	return bestcpu
 +}
 +
 +//go:nosplit
-+func taskerFutexwakeup(fb *mcl, addr *uint32, cnt uint32) (schedule bool) {
++func taskerFutexwakeup(fb *mcl, addr *uint32, cnt uint32) {
 +	for ; cnt != 0; cnt-- {
 +		fb.lock()
 +		m := fb.find(uintptr(unsafe.Pointer(addr)))
@@ -60363,9 +60422,7 @@ index 0000000000..a100bfc91c
 +				wt.remove(m)
 +				wt.unlock()
 +			}
-+			if taskerSetrunnable(m) == getcpuctx() {
-+				schedule = true
-+			}
++			taskerSetrunnable(m)
 +		}
 +	}
 +	return
@@ -60373,7 +60430,7 @@ index 0000000000..a100bfc91c
 +
 +//go:nowritebarrierrec
 +//go:nosplit
-+func curcpuSchedule() {
++func curcpuRunScheduler() {
 +	curcpu := getcpuctx()
 +	exe := curcpu.exe.ptr()
 +	for {
@@ -60429,7 +60486,7 @@ index 0000000000..a100bfc91c
 +		curcpu.runnable.lock()
 +		next := curcpu.runnable.pop()
 +		if next != nil && exe != nil {
-+			curcpuSavectx()
++			curcpuSavectxSched()
 +			curcpu.runnable.push(exe)
 +		}
 +		curcpu.runnable.unlock()
@@ -60558,9 +60615,7 @@ index 0000000000..a100bfc91c
 +	curcpu := getcpuctx()
 +	m.procid = uint64(atomic.Xadduintptr(&curcpu.t.tidgen, 1))
 +	archnewm(m)
-+	if taskerSetrunnable(m) == curcpu {
-+		curcpuSchedule()
-+	}
++	taskerSetrunnable(m)
 +}
 +
 +//go:nowritebarrierrec
@@ -60597,7 +60652,7 @@ index 0000000000..a100bfc91c
 +	fb.lock()
 +	sleep := (*addr == val)
 +	if sleep {
-+		curcpuSavectx()
++		curcpuSavectxCall()
 +		curcpu.exe = 0
 +		msetkey(m, uintptr(unsafe.Pointer(addr)))
 +		fb.push(m)
@@ -60617,9 +60672,7 @@ index 0000000000..a100bfc91c
 +//go:nosplit
 +func sysfutexwakeup(addr *uint32, cnt uint32) {
 +	fb := getcpuctx().t.fbucketbyaddr(uintptr(unsafe.Pointer(addr)))
-+	if taskerFutexwakeup(fb, addr, cnt) {
-+		curcpuSchedule()
-+	}
++	taskerFutexwakeup(fb, addr, cnt)
 +}
 +
 +//go:nowritebarrierrec
@@ -60628,7 +60681,7 @@ index 0000000000..a100bfc91c
 +	if uint64(ns) < 64 {
 +		return // to short to sleep (64 ns selected arbitrary)
 +	}
-+	curcpuSavectx()
++	curcpuSavectxCall()
 +	curcpu := getcpuctx()
 +	m := curcpu.exe.ptr()
 +	curcpu.exe = 0
@@ -60680,31 +60733,6 @@ index 0000000000..a100bfc91c
 +	t.timestart.mx.unlock()
 +}
 +
-+//go:nowritebarrierrec
-+//go:nosplit
-+func badSyscall() {
-+	for {
-+		breakpoint()
-+	}
-+}
-+
-+// utils
-+
-+//go:nosplit
-+func debugUint(v uint) {
-+	var buf [24]byte
-+	i := len(buf) - 1
-+	buf[i] = '\n'
-+	for i--; i > 0; i-- {
-+		buf[i] = byte(v%10 + '0')
-+		if v < 10 {
-+			break
-+		}
-+		v /= 10
-+	}
-+	syswrite(2, unsafe.Pointer(&buf[i]), int32(len(buf)-i))
-+}
-+
 +// m fields used
 +
 +//go:nosplit
@@ -60720,10 +60748,10 @@ index 0000000000..a100bfc91c
 +func msetwt(m *m, wt *msl) { m.caughtsig = guintptr(unsafe.Pointer(wt)) }
 diff --git a/src/runtime/tasker_noos_thumb.go b/src/runtime/tasker_noos_thumb.go
 new file mode 100644
-index 0000000000..a2673d6a41
+index 0000000000..ca419ec6a8
 --- /dev/null
 +++ b/src/runtime/tasker_noos_thumb.go
-@@ -0,0 +1,235 @@
+@@ -0,0 +1,234 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -60744,7 +60772,8 @@ index 0000000000..a2673d6a41
 +
 +func sev()
 +func curcpuSleep()
-+func curcpuSavectx()
++func curcpuSavectxSched()
++func curcpuSavectxCall() {} // all registars saved on caller's stack
 +
 +//go:nosplit
 +func (cpu *cpuctx) wakeup() { sev() }
@@ -60752,11 +60781,27 @@ index 0000000000..a2673d6a41
 +//go:nosplit
 +func curcpuWakeup() { sev() } // see ARM Errata 563915, STM32F10xx Errata 1.1.2
 +
++//go:nosplit
++func curcpuSchedule() {
++	// Can't run the scheduler directly in the system call because the SVCall
++	// has higher priority than some interrupts. If there is no any thread to
++	// run the scheduler sleeps in a loop (there is no idle threads) and if run
++	// in SVCall the CPU can't handle lower priority interrupts.
++	//
++	// Instead, we trigger PendSV (which has priority lower that any other
++	// interrupt) to run the scheduler and rely on the exception tail-chaining
++	// to don't execute any instruction after SWI until the scheduler does its
++	// job.
++	//
++	// Caution! You can't rely on tail-chaining in case of debuging.
++	scb.SCB().ICSR.Store(scb.PENDSVSET)
++}
++
 +// ARMv7-M requires at least 4 byte stack alignment so there are two bits
 +// in saved stack pointer that can be used by tasker. It uses it for:
 +const (
 +	thrPrivLevel = 1 << 0 // thread privilege level
-+	thrSmallCtx  = 1 << 1 // manualy saved context contains only g (R10) register
++	thrSmallCtx  = 1 << 1 // context saved in m contains only g (R10) register
 +)
 +
 +// archnewm setups m's stack
@@ -60791,11 +60836,15 @@ index 0000000000..a2673d6a41
 +
 +	sc := scb.SCB()
 +
-+	// SVCall and PendSV exceptions should have the lowest priority level. They
-+	// are both logically part of the thread mode so other exceptions must be
-+	// able to preempt them. Additionaly, they must not preempt each other.
-+	sc.PRI_SVCall().Store(cortexm.PrioLo << scb.PRI_SVCalln)
-+	sc.PRI_PendSV().Store(cortexm.PrioLo << scb.PRI_PendSVn)
++	// enable fault handlers
++	sc.SHCSR.SetBits(scb.MEMFAULTENA | scb.BUSFAULTENA | scb.USGFAULTENA)
++
++	// division by zero will cause the UsageFault
++	sc.DIV_0_TRP().Set()
++
++	// set PendSV and SVCall priorities according to description in rtos package
++	sc.PRI_SVCall().Store((4 << 5) << scb.PRI_SVCalln)
++	sc.PRI_PendSV().Store(255 << scb.PRI_PendSVn)
 +
 +	// All other exceptions/interrupts by default have the highest priority.
 +
@@ -60889,28 +60938,6 @@ index 0000000000..a2673d6a41
 +	return
 +}
 +
-+//go:nowritebarrierrec
-+//go:nosplit
-+func sysirqprio(irq int) (prio, errno int) {
-+	if uint(irq) >= irqNum() {
-+		return 0, 4 // rtos.ErrBadIRQNumber
-+	}
-+	return int(nvic.NVIC().IPR[irq].Load()), 0
-+}
-+
-+//go:nowritebarrierrec
-+//go:nosplit
-+func syssetirqprio(irq, prio int) (errno int) {
-+	if uint(irq) >= irqNum() {
-+		return 4 // rtos.ErrBadIRQNumber
-+	}
-+	if uint(prio) > 255 {
-+		return 5 // rtos.ErrBadIRQPrio
-+	}
-+	nvic.NVIC().IPR[irq].Store(nvic.IPR(prio))
-+	return 0
-+}
-+
 +// utils
 +
 +func cpucontrol() uint32
@@ -60961,10 +60988,10 @@ index 0000000000..a2673d6a41
 +type mOS [7]uint32
 diff --git a/src/runtime/tasker_noos_thumb.s b/src/runtime/tasker_noos_thumb.s
 new file mode 100644
-index 0000000000..03905db825
+index 0000000000..6e3a631909
 --- /dev/null
 +++ b/src/runtime/tasker_noos_thumb.s
-@@ -0,0 +1,317 @@
+@@ -0,0 +1,329 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -60979,16 +61006,16 @@ index 0000000000..03905db825
 +// length the ORR instruction is used because of its less energy per instruction
 +// factor (see: https://www.ics.forth.gr/carv/greenvm/files/tr450.pdf).
 +
-+// TODO: Check that we can detect exception tail-chaining to avoid manual
-+// stacking of previously stacked registers.
++// TODO: Use ICSR.RETTOBASE to avoid manual stacking of previously stacked
++// registers.
 +
 +#define ICSR_ADDR 0xE000ED04
 +#define ICSR_PENDSVCLR (1<<27)
 +
 +// identcurcpu indetifies the current CPU and returns a pointer to its cpuctx in
-+// R0. It can clobber R0-R4,LR registers (other registers should be preserved).
++// R0. It can clobber R0-R4,LR registers (other registers must be preserved).
 +TEXT runtime·identcurcpu(SB),NOSPLIT|NOFRAME,$0-0
-+	// for now only single CPU is supported
++	// for now only single CPU is supported (see also cpuid, osinit)
 +	MOVW  $·cpu0(SB), R0
 +	RET
 +
@@ -61048,10 +61075,7 @@ index 0000000000..03905db825
 +	// 3. IPSR in PSR
 +
 +	// To print stack frame in gdb use:
-+	//   p /x *(internal/cpu/cortexm.StackFrame*)($r1)
-+
-+	// To see line where PC points to:
-+	//   b * (internal/cpu/cortexm.StackFrame*)($r1).PC
++	//   x/8xw $r1
 +
 +	BKPT
 +	B   -1(PC)
@@ -61077,9 +61101,14 @@ index 0000000000..03905db825
 +TEXT runtime·securefaultHandler(SB),NOSPLIT|NOFRAME,$0-0
 +	B   ·faultHandler(SB)
 +
-+#define SYS_MAX_ARGS (24+4) // max. size of argumants and return values
++TEXT runtime·debugmonHandler(SB),NOSPLIT|NOFRAME,$0-0
++	B   ·faultHandler(SB)
 +
-+// svcallHandler handles synhronous SVCall exception generated by SWI
++
++#define SYS_MAX_ARGS (20+4) // max. size of argumants and return values + LR
++
++
++// svcallHandler handles synhronous SVCall exception generated by SWI (SVC)
 +// instruction. The tiny wrappers over SWI instruction add three additional
 +// parameters in registers:
 +//
@@ -61097,100 +61126,109 @@ index 0000000000..03905db825
 +// registers are caller saved. Therefore other (asynchronous) excepion handlers
 +// need to save and restore not stacked GP registers and FP ones (if extended
 +// frame was used). The SVCall is synchronous exception so this handler is
-+// called almost like normal function so it does not have to save any registers
-+// except g (R10). It saves more (g, PSP, LR, CONTROL[nPRIV]) to be ready for
-+// context switch.
++// called almost like normal function and does not have to save any registers
++// except g (R10) and LR (EXC_RETURN).
 +TEXT runtime·svcallHandler(SB),NOSPLIT|NOFRAME,$0-0
-+	// load cpuctx
-+	MOVW  LR, R12
-+	BL    ·identcurcpu(SB)  // current CPU context to R0
-+	MOVW  (cpuctx_exe)(R0), R3
++	// check the syscall number
++	CMP  $SYS_NUM, R4
++	BGE  badSyscall
 +
-+	// save SP, CONTROL[nPRIV], EXC_RETURN, g
-+	TST      $(1<<2), R12
-+	MOVW.EQ  MSP, R1
-+	MOVW.NE  PSP, R1
-+	MOVW     CONTROL, R2
-+	AND      $const_thrPrivLevel, R2
-+	ORR      R1, R2
-+	ADD      $const_thrSmallCtx, R2  // set thrSmallCtx (only g saved)
-+	MOVW     R2, (m_tls+const_msp*4)(R3)
-+	MOVW     R12, (m_tls+const_mer*4)(R3)
-+	MOVW     g, (m_libcall)(R3)
++	// stacked SP to R7
++	TST      $(1<<2), LR
++	MOVW.EQ  MSP, R7
++	MOVW.NE  PSP, R7
++	MOVW     R7, R1
 +
-+	// move cpuctx to g
-+	MOVW  R0, g
-+
-+	// check does paddnig was added (stacked xPSR bit 9)
-+	MOVW    (7*4)(R1), R0
++	// check does paddnig was added to the frame (stacked xPSR bit 9)
++	MOVW    (7*4)(R7), R0
 +	TST     $(1<<9), R0
 +	ADD.NE  $4, R1
 +
 +	// check does the extended frame is used
-+	TST     $(1<<4), R12
++	TST     $(1<<4), LR
 +	ADD.NE  $(8*4), R1
 +	ADD.EQ  $(26*4), R1
 +
-+	// check the syscall number
-+	CMP  $SYS_NUM, R4
-+	BGE  ·badSyscall(SB)  // does not return
++	// push g, LR on the stack
++	MOVM.DB.W  [g,LR], (R13)
 +
-+	// make some space on the stack
++	// make space on the stack for arguments + 3 registers
 +	SUB  $(SYS_MAX_ARGS+3*4), R13
 +
 +	// copy arguments from the caller's stack
-+	MOVW  R13, R2
 +	MOVW  $·duffcopy+1024(SB), R0
++	MOVW  R13, R2
 +	SUB   R5<<1, R0
++	MOVW  LR, R5  // save EXC_RETURN before call
 +	BL    (R0)
 +
 +	// save data needed to copy the return values back to the caller's stack
-+	ADD      $SYS_MAX_ARGS, R13, R0
-+	MOVM.IA  [R1,R2,R6], (R0)
++	ADD        $SYS_MAX_ARGS, R13, R0
++	MOVM.IA.W  [R1,R2,R6], (R0)
 +
++	// current CPU context to R0
++	BL  ·identcurcpu(SB)
++
++	// check for fast syscall (unfortunately it lets through the calls by
++	// higher priority exceptions that are disallowed to use syscalls at all)
++	CMP  $SYS_LAST_LOWISR, R4
++	BLS  fast
++
++	// check for syscall from interrupt handler
++	CMP  R0, g
++	BEQ  badHandlerCall  // syscall not allowed in handler mode
++
++	// save thread context (small): SP+CONTROL[nPRIV], EXC_RETURN, g
++	MOVW  (cpuctx_exe)(R0), R3
++	MOVW  CONTROL, R2
++	AND   $const_thrPrivLevel, R2
++	ORR   R2, R7
++	ADD   $const_thrSmallCtx, R7  // set thrSmallCtx (only g saved)
++	MOVW  R7, (m_tls+const_msp*4)(R3)
++	MOVW  R5, (m_tls+const_mer*4)(R3)
++	MOVW  g, (m_libcall)(R3)
++
++fast:
 +	// call the service routine
++	MOVW  R0, g
 +	MOVW  $·syscalls(SB), R0
 +	MOVW  (R0)(R4*4), R0
 +	BL    (R0)
 +
 +	// copy the return values back to the caller's stack
 +	MOVW  (SYS_MAX_ARGS+2*4)(R13), R5
-+	CBZ   R5, 6(PC)
++	CBZ   R5, 6(PC)  // check if is something to copy
 +	MOVW  (SYS_MAX_ARGS+0*4)(R13), R2
 +	MOVW  (SYS_MAX_ARGS+1*4)(R13), R1
 +	MOVW  $·duffcopy+1024(SB), R0
 +	SUB   R5<<1, R0
 +	BL    (R0)
-+	ADD   $(SYS_MAX_ARGS+3*4), R13
 +
-+	MOVW  (cpuctx_exe)(g), R3
++	// wind up the stack and return from syscall
++	ADD        $(SYS_MAX_ARGS+3*4), R13
++	MOVM.IA.W  (R13), [g,R15]
 +
-+	// fast path if exe did not changed
-+	MOVBU  (cpuctx_newexe)(g), R0
-+	CBNZ   R0, 3(PC)
-+	MOVW   (m_libcall)(R3), g
-+	MOVW   (m_tls+const_mer*4)(R3), R15
++badSyscall:
++	BKPT
++	B   -1(PC)
 +
-+	B   ·curcpuRestorectx(SB)
++badHandlerCall:
++	BKPT
++	B   -1(PC)
 +
-+TEXT runtime·debugmonHandler(SB),NOSPLIT|NOFRAME,$0-0
-+	B   ·faultHandler(SB)
 +
 +// pendsvHandler handles asynhronous PendSV exceptions generated by the system
-+// timer routine (to schedule/wakeup next thread) or by interrupt handlers (to
-+// wakeup threads waiting for some external event). The scheduler can clear
-+// PendSV pending bit before do its work to avoid reentry after return. The
-+// interrupt handler that wants to signal some external event to the thread that
-+// wait for it on the certain futex, wakes this thread and generates PendSV
-+// exception to run the scheduler. To avoid overlooking of this exception (the
-+// scheduler can clear pending bit) the interrupt handler must use DMB
-+// instruction to ensure that the PendSV pending state is not observable before
-+// the memory accesses that was performed to wakeup the thread.
++// timer routine or system calls, to schedule/wakeup next thread.
 +TEXT runtime·pendsvHandler(SB),NOSPLIT|NOFRAME,$0-0
 +	// load cpuctx
 +	MOVW  LR, R12
 +	BL    ·identcurcpu(SB)  // current CPU context to R0
++
++	// load cpuctx.exe
 +	MOVW  (cpuctx_exe)(R0), R3
++
++	// if cpuctx.exe == nil then context saved by syscall
++	CBZ  R3, contextSaved
 +
 +	// save not stacked registers (R4-R11), SP, CONTROL[nPRIV], EXC_RETURN
 +	TST      $(1<<2), R12
@@ -61198,45 +61236,47 @@ index 0000000000..03905db825
 +	MOVW.NE  PSP, R1
 +	MOVW     CONTROL, R2
 +	AND      $const_thrPrivLevel, R2
-+	ORR      R1, R2
-+	MOVW     R2, (m_tls+const_msp*4)(R3)
++	ORR      R2, R1
++	MOVW     R1, (m_tls+const_msp*4)(R3)
 +	MOVW     R12, (m_tls+const_mer*4)(R3)
 +	ADD      $m_libcall, R3
 +	MOVM.IA  [R4-R11], (R3)
 +
-+	MOVW  R0, g
-+
++contextSaved:
 +	// clear PendSV if set again to avoid unnecessary reentry to this handler
-+	MOVW  $ICSR_ADDR, R0
-+	MOVW  $ICSR_PENDSVCLR, R1
-+	MOVW  R1, (R0)
++	MOVW  $ICSR_ADDR, R1
++	MOVW  $ICSR_PENDSVCLR, R2
++	MOVW  R2, (R1)
 +	DMB   // ensure clearing happens before checking nanotime and futexes
 +
-+	BL  ·curcpuSchedule(SB)
++	// enter scheduler
++	MOVW  R0, g
++	BL    ·curcpuRunScheduler(SB)
 +
-+	MOVW  (cpuctx_exe)(g), R3
++	// load cpuctx.exe and cpuctx.newexe
++	MOVW   (cpuctx_exe)(g), R3
++	MOVBU  (cpuctx_newexe)(g), R0
 +
-+	// fast path if exe did not changed
-+	MOVBU    (cpuctx_newexe)(g), R0
-+	CBNZ     R0, 4(PC)
++	// fast path if exe did not changed (cpuctx.newexe == false)
++	CBNZ     R0, newexe
 +	ADD      $m_libcall, R3, R1
 +	MOVM.IA  (R1), [R4-R11]
 +	MOVW     (m_tls+const_mer*4)(R3), R15
 +
-+	B   ·curcpuRestorectx(SB)
-+
-+TEXT runtime·curcpuRestorectx(SB),NOSPLIT|NOFRAME,$0-0
++newexe:
++	// clear cpuctx.newexe
 +	MOVW  $0, R0
-+	MOVW  R0, (cpuctx_newexe)(g)
++	MOVB  R0, (cpuctx_newexe)(g)
 +
++	// load SP+CONTROL[nPRIV] and EXC_RETURN from new context
 +	MOVW  (m_tls+const_msp*4)(R3), R0
 +	MOVW  (m_tls+const_mer*4)(R3), R1
 +
 +	// restore privilege level
 +	MOVW  CONTROL, R2
 +	BIC   $const_thrPrivLevel, R2
-+	AND   $const_thrPrivLevel, R0, R12
-+	ADD   R12, R2
++	AND   $const_thrPrivLevel, R0, R4
++	ORR   R4, R2
 +	MOVW  R2, CONTROL
 +
 +	// restore PSP or MSP
@@ -61245,13 +61285,12 @@ index 0000000000..03905db825
 +	MOVW.EQ  R2, MSP
 +	MOVW.NE  R2, PSP
 +
-+	TST  $const_thrSmallCtx, R0
-+
-+	// only g saved in libcall
++	// fast path in case of small context (only g saved in libcall)
++	TST      $const_thrSmallCtx, R0
 +	MOVW.NE  (m_libcall)(R3), g
 +	B.NE     (R1)
 +
-+	// more registers saved in libcall
++	// restore registers saved in m.libcall
 +	ADD        $m_libcall, R3
 +	MOVM.IA.W  (R3), [R4-R11]
 +	TST        $0x10, R1
@@ -61260,7 +61299,7 @@ index 0000000000..03905db825
 +	HWORD      $0x8B10  // [D8-D15]
 +	B          (R1)
 +
-+TEXT runtime·curcpuSavectx(SB),NOSPLIT|NOFRAME,$0-0
++TEXT runtime·curcpuSavectxSched(SB),NOSPLIT|NOFRAME,$0-0
 +	MOVW  (cpuctx_exe)(g), R0
 +
 +	MOVW  (m_tls+const_mer*4)(R0), R1
