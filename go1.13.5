@@ -49489,7 +49489,7 @@ index 0000000000..2b03a6b291
 +}
 diff --git a/src/embedded/rtos/systim.go b/src/embedded/rtos/systim.go
 new file mode 100644
-index 0000000000..97644b3663
+index 0000000000..8eb8935b50
 --- /dev/null
 +++ b/src/embedded/rtos/systim.go
 @@ -0,0 +1,35 @@
@@ -49525,12 +49525,12 @@ index 0000000000..97644b3663
 +// implementation at a later stage (which is discouraged) you must ensure a
 +// continuity of time and that all gorutines that sleeeps using old setalarm
 +// function will be wakeup.
-+func SetSystemTimer(nanotime func() int64, setalarm func(ns int64)) error {
++func SetSystemTimer(nanotime func() int64, setalarm func(ns int64) bool) error {
 +	return setSystemTimer(nanotime, setalarm)
 +}
 diff --git a/src/embedded/rtos/systim_noos.go b/src/embedded/rtos/systim_noos.go
 new file mode 100644
-index 0000000000..e45f8ba9d1
+index 0000000000..6976db220a
 --- /dev/null
 +++ b/src/embedded/rtos/systim_noos.go
 @@ -0,0 +1,23 @@
@@ -49547,7 +49547,7 @@ index 0000000000..e45f8ba9d1
 +
 +var setsystimmx sync.Mutex
 +
-+func setSystemTimer(nanotime func() int64, setalarm func(ns int64)) error {
++func setSystemTimer(nanotime func() int64, setalarm func(ns int64) bool) error {
 +	setsystimmx.Lock()
 +	runtime_setsystim(nanotime, setalarm)
 +	setsystimmx.Unlock()
@@ -49555,11 +49555,11 @@ index 0000000000..e45f8ba9d1
 +}
 +
 +//go:linkname runtime_setsystim runtime.setsystim
-+func runtime_setsystim(nanotime func() int64, setalarm func(ns int64))
++func runtime_setsystim(nanotime func() int64, setalarm func(ns int64) bool)
 +
 diff --git a/src/embedded/rtos/systim_x.go b/src/embedded/rtos/systim_x.go
 new file mode 100644
-index 0000000000..13abaa4584
+index 0000000000..1e772fefed
 --- /dev/null
 +++ b/src/embedded/rtos/systim_x.go
 @@ -0,0 +1,11 @@
@@ -49571,7 +49571,7 @@ index 0000000000..13abaa4584
 +
 +package rtos
 +
-+func setSystemTimer(nanotime func() int64, setalarm func(ns int64)) error {
++func setSystemTimer(nanotime func() int64, setalarm func(ns int64) bool) error {
 +	return ErrNotSuppoted
 +}
 diff --git a/src/embedded/rtos/utils.go b/src/embedded/rtos/utils.go
@@ -57993,7 +57993,7 @@ index 0000000000..fa1b62ef6b
 +}
 diff --git a/src/runtime/os_noos.go b/src/runtime/os_noos.go
 new file mode 100644
-index 0000000000..0aa9f3b82d
+index 0000000000..93486210e8
 --- /dev/null
 +++ b/src/runtime/os_noos.go
 @@ -0,0 +1,112 @@
@@ -58046,7 +58046,7 @@ index 0000000000..0aa9f3b82d
 +}
 +
 +//go:nosplit
-+func setsystim(nanotime func() int64, setalarm func(ns int64)) {
++func setsystim(nanotime func() int64, setalarm func(ns int64) bool) {
 +	if nanotime != nil {
 +		thetasker.newnanotime = nanotime
 +	} else {
@@ -60225,10 +60225,10 @@ index 0000000000..e314346b1f
 +#define SYS_NUM          13
 diff --git a/src/runtime/tasker_noos.go b/src/runtime/tasker_noos.go
 new file mode 100644
-index 0000000000..c7330301a0
+index 0000000000..77e78a8d87
 --- /dev/null
 +++ b/src/runtime/tasker_noos.go
-@@ -0,0 +1,517 @@
+@@ -0,0 +1,518 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -60306,8 +60306,8 @@ index 0000000000..c7330301a0
 +// Tasker code does not use FPU so the architecture specific context switch
 +// code can avoid saving/restoring FPU context if not need.
 +
-+func dummyNanotime() int64   { return 1 }
-+func dummySetalarm(ns int64) {}
++func dummyNanotime() int64        { return 1 }
++func dummySetalarm(ns int64) bool { return false }
 +
 +var thetasker = tasker{nanotime: dummyNanotime, setalarm: dummySetalarm}
 +
@@ -60336,10 +60336,10 @@ index 0000000000..c7330301a0
 +	}
 +
 +	nanotime func() int64
-+	setalarm func(ns int64)
++	setalarm func(ns int64) bool
 +
-+	newnanotime func() int64   // see embedded/rtos.SetSystemTimer
-+	newsetalarm func(ns int64) // see embedded/rtos.SetSystemTimer
++	newnanotime func() int64        // see embedded/rtos.SetSystemTimer
++	newsetalarm func(ns int64) bool // see embedded/rtos.SetSystemTimer
 +}
 +
 +//go:nosplit
@@ -60501,8 +60501,9 @@ index 0000000000..c7330301a0
 +
 +		// Nothing to execute. If this will be a work-stealing scheduler it will
 +		// try to steal some work from the other CPU here.
-+		curcpu.t.setalarm(sleepuntil)
-+		curcpuSleep()
++		if curcpu.t.setalarm(sleepuntil) {
++			curcpuSleep()
++		}
 +	}
 +}
 +
