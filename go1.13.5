@@ -51187,7 +51187,7 @@ index 0000000000..ee9e171bef
 +package mpu
 diff --git a/src/internal/cpu/cortexm/mpu/mpu_thumb.go b/src/internal/cpu/cortexm/mpu/mpu_thumb.go
 new file mode 100644
-index 0000000000..179478542d
+index 0000000000..4bbb3e73df
 --- /dev/null
 +++ b/src/internal/cpu/cortexm/mpu/mpu_thumb.go
 @@ -0,0 +1,119 @@
@@ -51250,20 +51250,20 @@ index 0000000000..179478542d
 +const (
 +	ENA Attr = 1 << 0 // Enables region
 +
-+	B Attr = 1 << 16 // Bufferable.
-+	C Attr = 1 << 17 // Cacheable.
-+	S Attr = 1 << 18 // Shareable.
++	B Attr = 1 << 16 // Bufferable
++	C Attr = 1 << 17 // Cacheable
++	S Attr = 1 << 18 // Shareable
 +
 +	// Access permissons.
-+	Amask Attr = 7 << 24 // Use to extract access permission bits.
-+	A____ Attr = 0 << 24 // No access.
-+	Ar___ Attr = 5 << 24 // Priv-RO.
-+	Arw__ Attr = 1 << 24 // Priv-RW.
-+	Ar_r_ Attr = 6 << 24 // Priv-RO, Unpriv-RO.
-+	Arwr_ Attr = 2 << 24 // Priv-RW, Unpriv-RO.
-+	Arwrw Attr = 3 << 24 // Priv-RW, Unpriv-RW.
++	Amask Attr = 7 << 24 // Use to extract access permission bits
++	A____ Attr = 0 << 24 // No access
++	Ar___ Attr = 5 << 24 // Priv-RO
++	Arw__ Attr = 1 << 24 // Priv-RW
++	Ar_r_ Attr = 6 << 24 // Priv-RO, Unpriv-RO
++	Arwr_ Attr = 2 << 24 // Priv-RW, Unpriv-RO
++	Arwrw Attr = 3 << 24 // Priv-RW, Unpriv-RW
 +
-+	XN Attr = 1 << 28 // Instruction access disable.
++	XN Attr = 1 << 28 // Instruction access disable
 +)
 +
 +func SIZE(exp int) Attr {
@@ -51274,12 +51274,12 @@ index 0000000000..179478542d
 +	return int(a>>1)&0x1f + 1
 +}
 +
-+func SRD(srd int) Attr {
-+	return Attr(srd&0xff) << 8
++func SRD(srd uint8) Attr {
++	return Attr(srd) << 8
 +}
 +
-+func (a Attr) SRD() int {
-+	return int(a>>8) & 0xff
++func (a Attr) SRD() uint8 {
++	return uint8(a >> 8)
 +}
 +
 +func TEX(tex int) Attr {
@@ -60749,10 +60749,10 @@ index 0000000000..77e78a8d87
 +func msetwt(m *m, wt *msl) { m.caughtsig = guintptr(unsafe.Pointer(wt)) }
 diff --git a/src/runtime/tasker_noos_thumb.go b/src/runtime/tasker_noos_thumb.go
 new file mode 100644
-index 0000000000..ca419ec6a8
+index 0000000000..010d27299f
 --- /dev/null
 +++ b/src/runtime/tasker_noos_thumb.go
-@@ -0,0 +1,234 @@
+@@ -0,0 +1,276 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -60763,6 +60763,7 @@ index 0000000000..ca419ec6a8
 +	"embedded/mmio"
 +	"internal/cpu/cortexm"
 +	"internal/cpu/cortexm/debug/itm"
++	"internal/cpu/cortexm/mpu"
 +	"internal/cpu/cortexm/nvic"
 +	"internal/cpu/cortexm/scb"
 +	"internal/cpu/cortexm/scid"
@@ -60849,7 +60850,48 @@ index 0000000000..ca419ec6a8
 +
 +	// All other exceptions/interrupts by default have the highest priority.
 +
-+	mmio.MB() // ensure the exception priorities are set
++	// use MPU if available to catch nil pointer dereferences (need 4 regions)
++	if _, d, _ := mpu.Type(); d >= 4 {
++		// Bellow there is the MPU configuration that more or less corresponds
++		// to the default CPU behavior, without MPU enabled.
++		//
++		// All regions starts at address 0x00000000. The SIZE and SRD
++		// (sub-region disabled) fields are used to set the region address
++		// ranges.
++		//
++		// The first 64 bytes of the code region that corresponds to the first
++		// 16 exception vectors are set inaccessible to catch nil pointer
++		// dereferences. The code region is declared read/write because some
++		// MCUs use normal memory access to program Flash.
++		//
++		// Tha RAM region is configured as shareable (usually shared with DMA).
++		// Shareable regions are by default not cacheable. If you enable L1
++		// cache in Cortex-M7 set the acc.SIWT bit so the RAM will be cacheable
++		// in write-through mode. WT mode degrades performance (not as much as
++		// you may think) but allows to avoid cache maintenance operations which
++		// are problematic in case of Cortex-M7.
++		var (
++			noacc  = mpu.A____
++			code   = mpu.Arwrw | mpu.C
++			ram    = mpu.Arwrw | mpu.TEX(1) | mpu.C | mpu.B | mpu.S
++			periph = mpu.Arwrw | mpu.B | mpu.S | mpu.XN
++		)
++		mpu.SetRegion(0x00000000|mpu.VALID|0, mpu.ENA|mpu.SIZE(29)|code)
++		mpu.SetRegion(0x00000000|mpu.VALID|1, mpu.ENA|mpu.SIZE(6)|noacc)
++		mpu.SetRegion(
++			0x00000000|mpu.VALID|2,
++			mpu.ENA|mpu.SIZE(32)|mpu.SRD(0b10011011)|periph,
++		)
++		mpu.SetRegion(
++			0x00000000|mpu.VALID|3,
++			mpu.ENA|mpu.SIZE(32)|mpu.SRD(0b11100101)|ram,
++		)
++		mmio.MB() // ensure any previous memory access is done before enable MPU
++		mpu.Set(mpu.ENABLE | mpu.PRIVDEFENA)
++	}
++
++	// ensure everything is set before any subsequent memory access
++	mmio.MB()
 +}
 +
 +func taskerinit() {}
