@@ -1,9 +1,9 @@
 diff --git a/api/go1embedded.txt b/api/go1embedded.txt
 new file mode 100644
-index 0000000000..215e41eaca
+index 0000000000..f2630726fa
 --- /dev/null
 +++ b/api/go1embedded.txt
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,94 @@
 +pkg embedded/mmio, func MB()
 +pkg embedded/mmio, method (*U16) Addr() uintptr
 +pkg embedded/mmio, method (*U16) LoadBit(int) int
@@ -62,22 +62,26 @@ index 0000000000..215e41eaca
 +pkg embedded/mmio, type UM8 struct
 +pkg embedded/mmio, type UM8 struct, Mask uint8
 +pkg embedded/mmio, type UM8 struct, R *U8
-+pkg embedded/rtos, const IntPrioCurrent = 0
-+pkg embedded/rtos, const IntPrioCurrent int
++pkg embedded/rtos, const IntPrioCurrent = -1
++pkg embedded/rtos, const IntPrioCurrent ideal-int
 +pkg embedded/rtos, const IntPrioHigh = 0
-+pkg embedded/rtos, const IntPrioHigh int
++pkg embedded/rtos, const IntPrioHigh ideal-int
 +pkg embedded/rtos, const IntPrioHighest = 0
-+pkg embedded/rtos, const IntPrioHighest int
++pkg embedded/rtos, const IntPrioHighest ideal-int
 +pkg embedded/rtos, const IntPrioLow = 0
-+pkg embedded/rtos, const IntPrioLow int
++pkg embedded/rtos, const IntPrioLow ideal-int
 +pkg embedded/rtos, const IntPrioLowest = 0
-+pkg embedded/rtos, const IntPrioLowest int
++pkg embedded/rtos, const IntPrioLowest ideal-int
++pkg embedded/rtos, const IntPrioMid = 0
++pkg embedded/rtos, const IntPrioMid ideal-int
++pkg embedded/rtos, const IntPrioSysCall = 0
++pkg embedded/rtos, const IntPrioSysCall ideal-int
 +pkg embedded/rtos, const IntPrioSysTimer = 0
-+pkg embedded/rtos, const IntPrioSysTimer int
++pkg embedded/rtos, const IntPrioSysTimer ideal-int
 +pkg embedded/rtos, func Nanotime() int64
 +pkg embedded/rtos, func Nanosleep(int64)
 +pkg embedded/rtos, func SetPrivLevel(int) (int, error)
-+pkg embedded/rtos, func SetSystemTimer(func() int64, func(int64)) error
++pkg embedded/rtos, func SetSystemTimer(func() int64, func(int64) bool) error
 +pkg embedded/rtos, method (*Error) Error() string
 +pkg embedded/rtos, method (*Note) Clear()
 +pkg embedded/rtos, method (*Note) Sleep(int64) bool
@@ -49594,7 +49598,7 @@ index 0000000000..e110659f27
 +// copied from /home/michal/P/go/goroot/src/runtime/stubs.go
 +func bool2int(x bool) int { return int(uint8(*(*uint8)(unsafe.Pointer(&x)))) }
 diff --git a/src/go/build/deps_test.go b/src/go/build/deps_test.go
-index 179b0bfef5..57b590db54 100644
+index 179b0bfef5..4d82c802bc 100644
 --- a/src/go/build/deps_test.go
 +++ b/src/go/build/deps_test.go
 @@ -36,9 +36,9 @@ var pkgDeps = map[string][]string{
@@ -49602,7 +49606,7 @@ index 179b0bfef5..57b590db54 100644
  	"errors":                  {"runtime", "internal/reflectlite"},
  	"io":                      {"errors", "sync", "sync/atomic"},
 -	"runtime":                 {"unsafe", "runtime/internal/atomic", "runtime/internal/sys", "runtime/internal/math", "internal/cpu", "internal/bytealg"},
-+	"runtime":                 {"unsafe", "runtime/internal/atomic", "runtime/internal/sys", "runtime/internal/math", "internal/cpu", "internal/cpu/cortexm", "internal/cpu/cortexm/nvic", "internal/cpu/cortexm/scb", "internal/cpu/cortexm/scid", "internal/cpu/cortexm/debug/itm", "internal/bytealg", "embedded/mmio"},
++	"runtime":                 {"unsafe", "runtime/internal/atomic", "runtime/internal/sys", "runtime/internal/math", "internal/cpu", "internal/cpu/cortexm", "internal/cpu/cortexm/nvic", "internal/cpu/cortexm/scb", "internal/cpu/cortexm/scid", "internal/cpu/cortexm/debug/itm", "internal/cpu/cortexm/mpu", "internal/bytealg", "embedded/mmio"},
  	"runtime/internal/sys":    {},
 -	"runtime/internal/atomic": {"unsafe", "internal/cpu"},
 +	"runtime/internal/atomic": {"unsafe", "internal/cpu", "runtime/internal/sys"},
@@ -49627,7 +49631,7 @@ index 179b0bfef5..57b590db54 100644
 +	"internal/cpu/cortexm/systick":   {"unsafe", "embedded/mmio"},
 +	"internal/cpu/cortexm/debug/itm": {"unsafe", "embedded/mmio"},
 +	"embedded/mmio":                  {"unsafe"},
-+	"embedded/arch/cortexm/systim":   {"unsafe", "embedded/mmio", "internal/cpu/cortexm", "internal/cpu/cortexm/scb", "internal/cpu/cortexm/systick"},
++	"embedded/arch/cortexm/systim":   {"unsafe", "embedded/mmio", "embedded/rtos", "internal/cpu/cortexm", "internal/cpu/cortexm/scb", "internal/cpu/cortexm/systick"},
 +	"embedded/rtos":                  {"unsafe", "errors", "sync"},
  }
  
