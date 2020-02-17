@@ -1,9 +1,9 @@
 diff --git a/api/go1embedded.txt b/api/go1embedded.txt
 new file mode 100644
-index 0000000000..f2630726fa
+index 0000000000..65d16d97f5
 --- /dev/null
 +++ b/api/go1embedded.txt
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,93 @@
 +pkg embedded/mmio, func MB()
 +pkg embedded/mmio, method (*U16) Addr() uintptr
 +pkg embedded/mmio, method (*U16) LoadBit(int) int
@@ -78,13 +78,12 @@ index 0000000000..f2630726fa
 +pkg embedded/rtos, const IntPrioSysCall ideal-int
 +pkg embedded/rtos, const IntPrioSysTimer = 0
 +pkg embedded/rtos, const IntPrioSysTimer ideal-int
-+pkg embedded/rtos, func Nanotime() int64
-+pkg embedded/rtos, func Nanosleep(int64)
++pkg embedded/rtos, func Nanotime() time.Duration
 +pkg embedded/rtos, func SetPrivLevel(int) (int, error)
 +pkg embedded/rtos, func SetSystemTimer(func() int64, func(int64) bool) error
 +pkg embedded/rtos, method (*Error) Error() string
 +pkg embedded/rtos, method (*Note) Clear()
-+pkg embedded/rtos, method (*Note) Sleep(int64) bool
++pkg embedded/rtos, method (*Note) Sleep(time.Duration) bool
 +pkg embedded/rtos, method (*Note) Wakeup()
 +pkg embedded/rtos, method (IRQ) Disable() error
 +pkg embedded/rtos, method (IRQ) Enable(int) error
@@ -36464,7 +36463,7 @@ index 487c9260e8..ba15812ba9 100644
  	ArchWasm,
  }
 diff --git a/src/cmd/link/internal/ld/data.go b/src/cmd/link/internal/ld/data.go
-index 8e35f5c9dc..4e5e61c92a 100644
+index 8e35f5c9dc..869ce832d9 100644
 --- a/src/cmd/link/internal/ld/data.go
 +++ b/src/cmd/link/internal/ld/data.go
 @@ -126,7 +126,7 @@ func trampoline(ctxt *Link, s *sym.Symbol) {
@@ -36506,7 +36505,54 @@ index 8e35f5c9dc..4e5e61c92a 100644
  	}
  }
  
-@@ -1544,6 +1547,13 @@ func (ctxt *Link) dodata() {
+@@ -1208,6 +1211,46 @@ func (ctxt *Link) dodata() {
+ 		}
+ 	}
+ 
++	if ctxt.HeadType == objabi.Hnoos {
++		// leave some read-only variables in Flash (hack to save some RAM)
++		for _, s := range ctxt.Syms.Allsym {
++			switch s.Name {
++			case "embedded/rtos.errorsByNumber",
++				"math.mPi4", "math._tanP", "math._tanQ", "math._lgamA",
++				"math._lgamR", "math._lgamS", "math._lgamT", "math._lgamU",
++				"math._lgamV", "math._lgamW", "math._sin", "math._cos",
++				"math.pow10tab", "math.pow10postab32", "math.pow10negtab32",
++				"math.tanhP", "math.tanhQ", "math._gamP", "math._gamQ",
++				"math._gamS",
++				"math/big.pow5tab", "math/big._Accuracy_index",
++				"math/big._RoundingMode_index",
++				"math/rand.rngCooked", "math/rand.ke", "math/rand.we",
++				"math/rand.fe", "math/rand.kn", "math/rand.wn", "math/rand.fn",
++				"runtime.zeroVal", "runtime.staticbytes",
++				"runtime.fastlog2Table", "runtime.class_to_size",
++				"runtime.class_to_allocnpages", "runtime.class_to_divmagic",
++				"runtime.size_to_class8", "runtime.size_to_class128",
++				"runtime.waitReasonStrings", "runtime.boundsErrorFmts",
++				"runtime.boundsNegErrorFmts", "runtime.finalizer1",
++				"runtime.gcMarkWorkerModeStrings", "runtime.gStatusStrings",
++				"runtime.emptymspan",
++				"runtime/internal/sys.ntz8tab",
++				"strconv.smallPowersOfTen", "strconv.powersOfTen",
++				"strconv.uint64pow10", "strconv.leftcheats",
++				"strconv.isPrint32", "strconv.isPrint16",
++				"strconv.isNotPrint32", "strconv.isNotPrint16",
++				"strconv.isGraphic", "strconv.float64info",
++				"strconv.float32info",
++				"syscall.errors",
++				"time.std0x", "time.months", "time.days", "time.daysBefore",
++				"time.utcLoc",
++				"unicode/utf8.first", "unicode/utf8.acceptRanges":
++
++				s.Type = sym.SRODATA
++			}
++		}
++	}
++
+ 	// Collect data symbols by type into data.
+ 	var data [sym.SXREF][]*sym.Symbol
+ 	for _, s := range ctxt.Syms.Allsym {
+@@ -1544,6 +1587,13 @@ func (ctxt *Link) dodata() {
  		ctxt.Syms.Lookup("runtime.types", 0).Sect = sect
  		ctxt.Syms.Lookup("runtime.etypes", 0).Sect = sect
  	}
@@ -36520,7 +36566,7 @@ index 8e35f5c9dc..4e5e61c92a 100644
  	for _, symn := range sym.ReadOnly {
  		align := dataMaxAlign[symn]
  		if sect.Align < align {
-@@ -2160,9 +2170,11 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2160,9 +2210,11 @@ func (ctxt *Link) address() []*sym.Segment {
  	order = append(order, &Segtext)
  	Segtext.Rwx = 05
  	Segtext.Vaddr = va
@@ -36532,7 +36578,7 @@ index 8e35f5c9dc..4e5e61c92a 100644
  		va += s.Length
  	}
  
-@@ -2190,9 +2202,11 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2190,9 +2242,11 @@ func (ctxt *Link) address() []*sym.Segment {
  		order = append(order, &Segrodata)
  		Segrodata.Rwx = 04
  		Segrodata.Vaddr = va
@@ -36544,7 +36590,7 @@ index 8e35f5c9dc..4e5e61c92a 100644
  			va += s.Length
  		}
  
-@@ -2210,9 +2224,11 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2210,9 +2264,11 @@ func (ctxt *Link) address() []*sym.Segment {
  		order = append(order, &Segrelrodata)
  		Segrelrodata.Rwx = 06
  		Segrelrodata.Vaddr = va
@@ -36556,7 +36602,7 @@ index 8e35f5c9dc..4e5e61c92a 100644
  			va += s.Length
  		}
  
-@@ -2220,15 +2236,30 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2220,15 +2276,30 @@ func (ctxt *Link) address() []*sym.Segment {
  	}
  
  	va = uint64(Rnd(int64(va), int64(*FlagRound)))
@@ -36592,7 +36638,7 @@ index 8e35f5c9dc..4e5e61c92a 100644
  	var data *sym.Section
  	var noptr *sym.Section
  	var bss *sym.Section
-@@ -2242,13 +2273,16 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2242,13 +2313,16 @@ func (ctxt *Link) address() []*sym.Segment {
  			vlen = int64(Segdata.Sections[i+1].Vaddr - s.Vaddr)
  		}
  		s.Vaddr = va
@@ -36609,7 +36655,7 @@ index 8e35f5c9dc..4e5e61c92a 100644
  		}
  		if s.Name == ".bss" {
  			bss = s
-@@ -2263,18 +2297,23 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2263,18 +2337,23 @@ func (ctxt *Link) address() []*sym.Segment {
  	Segdata.Filelen = bss.Vaddr - Segdata.Vaddr
  
  	va = uint64(Rnd(int64(va), int64(*FlagRound)))
@@ -36633,7 +36679,7 @@ index 8e35f5c9dc..4e5e61c92a 100644
  		}
  		Segdwarf.Length = va - Segdwarf.Vaddr
  	}
-@@ -2370,6 +2409,14 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2370,6 +2449,14 @@ func (ctxt *Link) address() []*sym.Segment {
  	ctxt.xdefine("runtime.enoptrbss", sym.SNOPTRBSS, int64(noptrbss.Vaddr+noptrbss.Length))
  	ctxt.xdefine("runtime.end", sym.SBSS, int64(Segdata.Vaddr+Segdata.Length))
  
@@ -36648,7 +36694,16 @@ index 8e35f5c9dc..4e5e61c92a 100644
  	return order
  }
  
-@@ -2450,7 +2497,7 @@ func compressSyms(ctxt *Link, syms []*sym.Symbol) []byte {
+@@ -2386,7 +2473,7 @@ func (ctxt *Link) layout(order []*sym.Segment) uint64 {
+ 				// Assuming the previous segment was
+ 				// aligned, the following rounding
+ 				// should ensure that this segment's
+-				// VA ≡ Fileoff mod FlagRound.
++				// VA ��� Fileoff mod FlagRound.
+ 				seg.Fileoff = uint64(Rnd(int64(prev.Fileoff+prev.Filelen), int64(*FlagRound)))
+ 				if seg.Vaddr%uint64(*FlagRound) != seg.Fileoff%uint64(*FlagRound) {
+ 					Exitf("bad segment rounding (Vaddr=%#x Fileoff=%#x FlagRound=%#x)", seg.Vaddr, seg.Fileoff, *FlagRound)
+@@ -2450,7 +2537,7 @@ func compressSyms(ctxt *Link, syms []*sym.Symbol) []byte {
  			s.P = ctxt.relocbuf
  			s.Attr.Set(sym.AttrReadOnly, false)
  		}
@@ -49322,7 +49377,7 @@ index 0000000000..dd3d98b380
 +}
 diff --git a/src/embedded/rtos/nanotime.go b/src/embedded/rtos/nanotime.go
 new file mode 100644
-index 0000000000..1e9aebcd2c
+index 0000000000..aa6fce0d7d
 --- /dev/null
 +++ b/src/embedded/rtos/nanotime.go
 @@ -0,0 +1,19 @@
@@ -49332,32 +49387,35 @@ index 0000000000..1e9aebcd2c
 +
 +package rtos
 +
-+import _ "unsafe"
++import (
++	"time"
++	_ "unsafe"
++)
 +
-+// Nanotime returns monotonic time in nanosecond.
-+func Nanotime() int64 { return runtime_nanotime() }
-+
-+// Nanosleep pauses the current goroutine for at least ns nanosecond.
-+func Nanosleep(ns int64) { time_sleep(ns) }
++// Nanotime returns a time duration from some event in the past. Typically it's
++// roughly corresponds to the system runtime.
++func Nanotime() time.Duration {
++	return time.Duration(runtime_nanotime())
++}
 +
 +//go:linkname runtime_nanotime runtime.nanotime
 +func runtime_nanotime() int64
-+
-+//go:linkname time_sleep time.Sleep
-+func time_sleep(ns int64)
 diff --git a/src/embedded/rtos/note.go b/src/embedded/rtos/note.go
 new file mode 100644
-index 0000000000..4306ff6813
+index 0000000000..1e2ba09611
 --- /dev/null
 +++ b/src/embedded/rtos/note.go
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,48 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
 +
 +package rtos
 +
-+import _ "unsafe"
++import (
++	"time"
++	_ "unsafe"
++)
 +
 +// Note allows to communicate the occurrence of an event.
 +//
@@ -49377,7 +49435,9 @@ index 0000000000..4306ff6813
 +
 +// Sleep sleeps on the cleared note until other goroutine or interrupt handler
 +// call Wakeup or until the timeout.
-+func (n *Note) Sleep(ns int64) bool { return runtime_notetsleepg(n, ns) }
++func (n *Note) Sleep(timeout time.Duration) bool {
++	return runtime_notetsleepg(n, int64(timeout))
++}
 +
 +// Wakeup wakeups the goroutine that sleeps on the note. The Wakeup remains in
 +// effect until subequent Clear so future Sleep will return immediately.
@@ -49598,7 +49658,7 @@ index 0000000000..e110659f27
 +// copied from /home/michal/P/go/goroot/src/runtime/stubs.go
 +func bool2int(x bool) int { return int(uint8(*(*uint8)(unsafe.Pointer(&x)))) }
 diff --git a/src/go/build/deps_test.go b/src/go/build/deps_test.go
-index 179b0bfef5..4d82c802bc 100644
+index 179b0bfef5..40322d305b 100644
 --- a/src/go/build/deps_test.go
 +++ b/src/go/build/deps_test.go
 @@ -36,9 +36,9 @@ var pkgDeps = map[string][]string{
@@ -49632,7 +49692,7 @@ index 179b0bfef5..4d82c802bc 100644
 +	"internal/cpu/cortexm/debug/itm": {"unsafe", "embedded/mmio"},
 +	"embedded/mmio":                  {"unsafe"},
 +	"embedded/arch/cortexm/systim":   {"unsafe", "embedded/mmio", "embedded/rtos", "internal/cpu/cortexm", "internal/cpu/cortexm/scb", "internal/cpu/cortexm/systick"},
-+	"embedded/rtos":                  {"unsafe", "errors", "sync"},
++	"embedded/rtos":                  {"unsafe", "errors", "sync", "time"},
  }
  
  // isMacro reports whether p is a package dependency macro
@@ -53108,6 +53168,27 @@ index 0000000000..3b6b0474ea
 +const CacheLinePadSize = 32 // Cortex-M7
 +
 +func doinit() {}
+diff --git a/src/internal/poll/fd_noos.go b/src/internal/poll/fd_noos.go
+new file mode 100644
+index 0000000000..059021af14
+--- /dev/null
++++ b/src/internal/poll/fd_noos.go
+@@ -0,0 +1,15 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package poll
++
++type FD struct {
++	// Lock sysfd and serialize access to Read and Write methods.
++	fdmu fdMutex
++
++	// Whether this is a file rather than a network socket.
++	isFile bool
++}
++
++func (fd *FD) destroy() error { return nil }
 diff --git a/src/internal/syscall/unix/at_sysnum_fstatat64_linux.go b/src/internal/syscall/unix/at_sysnum_fstatat64_linux.go
 index c6ea206c12..ab2f05e88c 100644
 --- a/src/internal/syscall/unix/at_sysnum_fstatat64_linux.go
@@ -53582,6 +53663,202 @@ index 0000000000..31bf872e43
 +
 +TEXT ·Tanh(SB), NOSPLIT, $0
 +	B ·tanh(SB)
+diff --git a/src/os/dir_noos.go b/src/os/dir_noos.go
+new file mode 100644
+index 0000000000..2f74995f27
+--- /dev/null
++++ b/src/os/dir_noos.go
+@@ -0,0 +1,13 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package os
++
++import "syscall"
++
++type dirInfo struct{}
++
++func (f *File) readdirnames(n int) (names []string, err error) {
++	return nil, syscall.ENOTSUP
++}
+diff --git a/src/os/exec_noos.go b/src/os/exec_noos.go
+new file mode 100644
+index 0000000000..1ddd762514
+--- /dev/null
++++ b/src/os/exec_noos.go
+@@ -0,0 +1,34 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package os
++
++import (
++	"syscall"
++	"time"
++)
++
++type ProcessState struct{}
++
++func findProcess(pid int) (p *Process, err error) {
++	return &Process{Pid: pid}, nil
++}
++
++func startProcess(name string, argv []string, attr *ProcAttr) (p *Process, err error) {
++	return nil, &PathError{"fork/exec", name, syscall.ENOTSUP}
++}
++
++func (p *Process) release() error               { return syscall.ENOTSUP }
++func (p *Process) kill() error                  { return syscall.ENOTSUP }
++func (p *Process) wait() (*ProcessState, error) { return nil, syscall.ENOTSUP }
++func (p *Process) signal(sig Signal) error      { return syscall.ENOTSUP }
++
++func (p *ProcessState) userTime() time.Duration   { return 0 }
++func (p *ProcessState) systemTime() time.Duration { return 0 }
++func (p *ProcessState) exited() bool              { return false }
++func (p *ProcessState) success() bool             { return false }
++func (p *ProcessState) sys() interface{}          { return nil }
++func (p *ProcessState) sysUsage() interface{}     { return nil }
++
++func executable() (string, error) { return "", ErrNotExist }
+diff --git a/src/os/file_noos.go b/src/os/file_noos.go
+new file mode 100644
+index 0000000000..81cbb5dfe3
+--- /dev/null
++++ b/src/os/file_noos.go
+@@ -0,0 +1,131 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package os
++
++import (
++	"syscall"
++	"time"
++)
++
++type file struct {
++	name       string
++	dirinfo    *dirInfo // nil unless directory being read
++	appendMode bool
++}
++
++func NewFile(fd uintptr, name string) *File {
++	return nil
++}
++
++func (f *File) readdir(n int) (fi []FileInfo, err error) {
++	return nil, syscall.EINVAL
++}
++
++func (f *File) checkValid(op string) error {
++	if f == nil {
++		return ErrInvalid
++	}
++	return nil
++}
++
++func (f *File) read(b []byte) (n int, err error) {
++	return 0, f.wrapErr("read", syscall.ENOTSUP)
++}
++
++func (f *File) pread(b []byte, off int64) (n int, err error) {
++	return 0, f.wrapErr("pread", syscall.ENOTSUP)
++}
++
++func (f *File) write(b []byte) (n int, err error) {
++	return 0, f.wrapErr("write", syscall.ENOTSUP)
++}
++
++func (f *File) pwrite(b []byte, off int64) (n int, err error) {
++	return 0, f.wrapErr("pwrite", syscall.ENOTSUP)
++}
++
++func (f *File) seek(offset int64, whence int) (ret int64, err error) {
++	return 0, f.wrapErr("seek", syscall.ENOTSUP)
++}
++
++// See docs in file.go:(*File).Chmod.
++func (f *File) chmod(mode FileMode) error {
++	return f.wrapErr("chmod", syscall.ENOTSUP)
++}
++
++func (f *File) setDeadline(t time.Time) error {
++	return f.wrapErr("setDeadline", syscall.ENOTSUP)
++}
++
++func (f *File) setReadDeadline(t time.Time) error {
++	return f.wrapErr("setDeadline", syscall.ENOTSUP)
++}
++
++func (f *File) setWriteDeadline(t time.Time) error {
++	return f.wrapErr("setDeadline", syscall.ENOTSUP)
++}
++
++func (f *File) Close() error {
++	return f.wrapErr("close", syscall.ENOTSUP)
++}
++
++func (f *File) Stat() (FileInfo, error) {
++	return nil, f.wrapErr("setDeadline", syscall.ENOTSUP)
++
++}
++
++func epipecheck(file *File, e error) {}
++
++// fixLongPath is a noop on non-Windows platforms.
++func fixLongPath(path string) string {
++	return path
++}
++
++func syscallMode(i FileMode) uint32 {
++	return 0
++}
++
++func tempDir() string {
++	return "/tmp"
++}
++
++func openFileNolog(name string, flag int, perm FileMode) (*File, error) {
++	return nil, &PathError{"open", name, syscall.ENOTSUP}
++}
++
++func rename(oldname, newname string) error {
++	return &PathError{"rename", oldname, syscall.ENOTSUP}
++}
++
++// See docs in file.go:Chmod.
++func chmod(name string, mode FileMode) error {
++	return &PathError{"chmod", name, syscall.ENOTSUP}
++}
++
++func Remove(name string) error {
++	return &PathError{"remove", name, syscall.ENOTSUP}
++}
++
++type rawConn struct{}
++
++func (c *rawConn) Control(f func(uintptr)) error {
++	return syscall.ENOTSUP
++}
++
++func (c *rawConn) Read(f func(uintptr) bool) error {
++	return syscall.ENOTSUP
++}
++
++func (c *rawConn) Write(f func(uintptr) bool) error {
++	return syscall.ENOTSUP
++}
++
++func newRawConn(file *File) (*rawConn, error) {
++	return nil, syscall.ENOTSUP
++}
++
++func hostname() (name string, err error) {
++	return "", syscall.ENOTSUP
++}
 diff --git a/src/os/path_unix.go b/src/os/path_unix.go
 index df423d2c9d..f0f3b784e6 100644
 --- a/src/os/path_unix.go
@@ -53592,6 +53869,88 @@ index df423d2c9d..f0f3b784e6 100644
  
 -// +build aix darwin dragonfly freebsd js,wasm linux nacl netbsd openbsd solaris
 +// +build aix darwin dragonfly freebsd js,wasm linux nacl netbsd noos openbsd solaris
+ 
+ package os
+ 
+diff --git a/src/os/rawconn.go b/src/os/rawconn.go
+index 9e11cda8c9..9d8f4dc501 100644
+--- a/src/os/rawconn.go
++++ b/src/os/rawconn.go
+@@ -3,6 +3,7 @@
+ // license that can be found in the LICENSE file.
+ 
+ // +build !plan9
++// +build !noos
+ 
+ package os
+ 
+diff --git a/src/os/stat_noos.go b/src/os/stat_noos.go
+new file mode 100644
+index 0000000000..bde6b353e3
+--- /dev/null
++++ b/src/os/stat_noos.go
+@@ -0,0 +1,15 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package os
++
++import "syscall"
++
++func statNolog(name string) (FileInfo, error) {
++	return nil, &PathError{"stat", name, syscall.ENOTSUP}
++}
++
++func lstatNolog(name string) (FileInfo, error) {
++	return nil, &PathError{"lstat", name, syscall.ENOTSUP}
++}
+diff --git a/src/os/types_noos.go b/src/os/types_noos.go
+new file mode 100644
+index 0000000000..51089d8cd8
+--- /dev/null
++++ b/src/os/types_noos.go
+@@ -0,0 +1,31 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package os
++
++import (
++	"syscall"
++	"time"
++)
++
++type fileStat struct {
++	name    string
++	size    int64
++	mode    FileMode
++	modTime time.Time
++	sys     interface{}
++}
++
++func (fs *fileStat) Size() int64        { return fs.size }
++func (fs *fileStat) Mode() FileMode     { return fs.mode }
++func (fs *fileStat) ModTime() time.Time { return fs.modTime }
++func (fs *fileStat) Sys() interface{}   { return fs.sys }
++
++func sameFile(fs1, fs2 *fileStat) bool {
++	a := fs1.sys.(*syscall.Dir)
++	b := fs2.sys.(*syscall.Dir)
++	return a.Qid.Path == b.Qid.Path && a.Type == b.Type && a.Dev == b.Dev
++}
++
++const badFd = -1
+diff --git a/src/os/types_unix.go b/src/os/types_unix.go
+index c0259ae0e8..8a595aaa98 100644
+--- a/src/os/types_unix.go
++++ b/src/os/types_unix.go
+@@ -4,6 +4,7 @@
+ 
+ // +build !windows
+ // +build !plan9
++// +build !noos
  
  package os
  
@@ -55243,7 +55602,7 @@ index 992df6391e..007b53c3ed 100644
  	dumpint(uint64(memstats.numgc))
  }
 diff --git a/src/runtime/iface.go b/src/runtime/iface.go
-index bb4eccc9bd..4a41c927f1 100644
+index bb4eccc9bd..62b60f9699 100644
 --- a/src/runtime/iface.go
 +++ b/src/runtime/iface.go
 @@ -10,7 +10,7 @@ import (
@@ -55267,14 +55626,6 @@ index bb4eccc9bd..4a41c927f1 100644
  	for _, md := range activeModules() {
  		for _, i := range md.itablinks {
  			itabAdd(i)
-@@ -517,6 +522,7 @@ func iterate_itabs(fn func(*itab)) {
- }
- 
- // staticbytes is used to avoid convT2E for byte-sized values.
-+// TODO(md): consider changing to string to save RAM (MCU)
- var staticbytes = [...]byte{
- 	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
- 	0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
 diff --git a/src/runtime/internal/atomic/asm_thumb.s b/src/runtime/internal/atomic/asm_thumb.s
 new file mode 100644
 index 0000000000..80e855a4f3
@@ -56737,7 +57088,7 @@ index f9dd6ca474..4741f7ee19 100644
  
  	v := unsafe.Pointer(f.chunk)
 diff --git a/src/runtime/mgc.go b/src/runtime/mgc.go
-index 8a6b860c96..7a6d1e1d49 100644
+index 8a6b860c96..e85a8d258e 100644
 --- a/src/runtime/mgc.go
 +++ b/src/runtime/mgc.go
 @@ -137,12 +137,12 @@ import (
@@ -56770,7 +57121,7 @@ index 8a6b860c96..7a6d1e1d49 100644
  	}
 -	return 100
 +	if _MCU != 0 {
-+		return 25
++		return 10
 +	} else {
 +		return 100
 +	}
@@ -57872,7 +58223,7 @@ index 0000000000..dd76fb46b0
 +	return ""
 +}
 diff --git a/src/runtime/mstats.go b/src/runtime/mstats.go
-index 09dbb26735..18fe1a6f04 100644
+index 09dbb26735..b5883b55bb 100644
 --- a/src/runtime/mstats.go
 +++ b/src/runtime/mstats.go
 @@ -59,8 +59,8 @@ type mstats struct {
@@ -57881,8 +58232,8 @@ index 09dbb26735..18fe1a6f04 100644
  	pause_total_ns  uint64
 -	pause_ns        [256]uint64 // circular buffer of recent gc pause lengths
 -	pause_end       [256]uint64 // circular buffer of recent gc end times (nanoseconds since 1970)
-+	pause_ns        [256*(1-_MCU) + 32*_MCU]uint64 // circular buffer of recent gc pause lengths
-+	pause_end       [256*(1-_MCU) + 32*_MCU]uint64 // circular buffer of recent gc end times (nanoseconds since 1970)
++	pause_ns        [256*(1-_MCU) + 16*_MCU]uint64 // circular buffer of recent gc pause lengths
++	pause_end       [256*(1-_MCU) + 16*_MCU]uint64 // circular buffer of recent gc end times (nanoseconds since 1970)
  	numgc           uint32
  	numforcedgc     uint32  // number of user-forced GCs
  	gc_cpu_fraction float64 // fraction of CPU time used by GC
@@ -57891,7 +58242,7 @@ index 09dbb26735..18fe1a6f04 100644
  	// recent N%256th GC cycle. There may be multiple pauses per
  	// GC cycle; this is the sum of all pauses during a cycle.
 -	PauseNs [256]uint64
-+	PauseNs [256*(1-_MCU) + 32*_MCU]uint64
++	PauseNs [256*(1-_MCU) + 16*_MCU]uint64
  
  	// PauseEnd is a circular buffer of recent GC pause end times,
  	// as nanoseconds since 1970 (the UNIX epoch).
@@ -57900,7 +58251,7 @@ index 09dbb26735..18fe1a6f04 100644
  	// multiple pauses per GC cycle; this records the end of the
  	// last pause in a cycle.
 -	PauseEnd [256]uint64
-+	PauseEnd [256*(1-_MCU) + 32*_MCU]uint64
++	PauseEnd [256*(1-_MCU) + 16*_MCU]uint64
  
  	// NumGC is the number of completed GC cycles.
  	NumGC uint32
@@ -61775,6 +62126,141 @@ index f790d3b17f..b6929f4e7b 100644
  		// arm doesn't have a division instruction, so
  		// slowdodiv is the best that we can do.
  		return slowdodiv(n, d)
+diff --git a/src/strconv/decimal.go b/src/strconv/decimal.go
+index b58001888e..aa2ac5e960 100644
+--- a/src/strconv/decimal.go
++++ b/src/strconv/decimal.go
+@@ -175,7 +175,7 @@ type leftCheat struct {
+ 	cutoff string // minus one digit if original < a.
+ }
+ 
+-var leftcheats = []leftCheat{
++var leftcheats = [...]leftCheat{
+ 	// Leading digits of 1/2^i = 5^i.
+ 	// 5^23 is not an exact 64-bit floating point number,
+ 	// so have to use bc for the math.
+diff --git a/src/strconv/isprint.go b/src/strconv/isprint.go
+index a8dfdb2d9b..35e9eaf38a 100644
+--- a/src/strconv/isprint.go
++++ b/src/strconv/isprint.go
+@@ -8,7 +8,7 @@ package strconv
+ 
+ // (448+137+90)*2 + (418)*4 = 3022 bytes
+ 
+-var isPrint16 = []uint16{
++var isPrint16 = [...]uint16{
+ 	0x0020, 0x007e,
+ 	0x00a1, 0x0377,
+ 	0x037a, 0x037f,
+@@ -235,7 +235,7 @@ var isPrint16 = []uint16{
+ 	0xfffc, 0xfffd,
+ }
+ 
+-var isNotPrint16 = []uint16{
++var isNotPrint16 = [...]uint16{
+ 	0x00ad,
+ 	0x038b,
+ 	0x038d,
+@@ -375,7 +375,7 @@ var isNotPrint16 = []uint16{
+ 	0xffe7,
+ }
+ 
+-var isPrint32 = []uint32{
++var isPrint32 = [...]uint32{
+ 	0x010000, 0x01004d,
+ 	0x010050, 0x01005d,
+ 	0x010080, 0x0100fa,
+@@ -587,7 +587,7 @@ var isPrint32 = []uint32{
+ 	0x0e0100, 0x0e01ef,
+ }
+ 
+-var isNotPrint32 = []uint16{ // add 0x10000 to each entry
++var isNotPrint32 = [...]uint16{ // add 0x10000 to each entry
+ 	0x000c,
+ 	0x0027,
+ 	0x003b,
+@@ -681,7 +681,7 @@ var isNotPrint32 = []uint16{ // add 0x10000 to each entry
+ }
+ 
+ // isGraphic lists the graphic runes not matched by IsPrint.
+-var isGraphic = []uint16{
++var isGraphic = [...]uint16{
+ 	0x00a0,
+ 	0x1680,
+ 	0x2000,
+diff --git a/src/strconv/makeisprint.go b/src/strconv/makeisprint.go
+index 1a3248f308..45d8a2c23b 100644
+--- a/src/strconv/makeisprint.go
++++ b/src/strconv/makeisprint.go
+@@ -148,25 +148,25 @@ func main() {
+ 		(len(range16)+len(except16)+len(except32))*2+
+ 			(len(range32))*4)
+ 
+-	fmt.Fprintf(&buf, "var isPrint16 = []uint16{\n")
++	fmt.Fprintf(&buf, "var isPrint16 = [...]uint16{\n")
+ 	for i := 0; i < len(range16); i += 2 {
+ 		fmt.Fprintf(&buf, "\t%#04x, %#04x,\n", range16[i], range16[i+1])
+ 	}
+ 	fmt.Fprintf(&buf, "}\n\n")
+ 
+-	fmt.Fprintf(&buf, "var isNotPrint16 = []uint16{\n")
++	fmt.Fprintf(&buf, "var isNotPrint16 = [...]uint16{\n")
+ 	for _, r := range except16 {
+ 		fmt.Fprintf(&buf, "\t%#04x,\n", r)
+ 	}
+ 	fmt.Fprintf(&buf, "}\n\n")
+ 
+-	fmt.Fprintf(&buf, "var isPrint32 = []uint32{\n")
++	fmt.Fprintf(&buf, "var isPrint32 = [...]uint32{\n")
+ 	for i := 0; i < len(range32); i += 2 {
+ 		fmt.Fprintf(&buf, "\t%#06x, %#06x,\n", range32[i], range32[i+1])
+ 	}
+ 	fmt.Fprintf(&buf, "}\n\n")
+ 
+-	fmt.Fprintf(&buf, "var isNotPrint32 = []uint16{ // add 0x10000 to each entry\n")
++	fmt.Fprintf(&buf, "var isNotPrint32 = [...]uint16{ // add 0x10000 to each entry\n")
+ 	for _, r := range except32 {
+ 		if r >= 0x20000 {
+ 			log.Fatalf("%U too big for isNotPrint32\n", r)
+@@ -177,7 +177,7 @@ func main() {
+ 
+ 	// The list of graphic but not "printable" runes is short. Just make one easy table.
+ 	fmt.Fprintf(&buf, "// isGraphic lists the graphic runes not matched by IsPrint.\n")
+-	fmt.Fprintf(&buf, "var isGraphic = []uint16{\n")
++	fmt.Fprintf(&buf, "var isGraphic = [...]uint16{\n")
+ 	for r := rune(0); r <= unicode.MaxRune; r++ {
+ 		if unicode.IsPrint(r) != unicode.IsGraphic(r) {
+ 			// Sanity check.
+diff --git a/src/strconv/quote.go b/src/strconv/quote.go
+index b50496a0ff..e8b8d110d3 100644
+--- a/src/strconv/quote.go
++++ b/src/strconv/quote.go
+@@ -500,7 +500,7 @@ func IsPrint(r rune) bool {
+ 	// If we find x in a range, make sure x is not in isNotPrint list.
+ 
+ 	if 0 <= r && r < 1<<16 {
+-		rr, isPrint, isNotPrint := uint16(r), isPrint16, isNotPrint16
++		rr, isPrint, isNotPrint := uint16(r), isPrint16[:], isNotPrint16[:]
+ 		i := bsearch16(isPrint, rr)
+ 		if i >= len(isPrint) || rr < isPrint[i&^1] || isPrint[i|1] < rr {
+ 			return false
+@@ -509,7 +509,7 @@ func IsPrint(r rune) bool {
+ 		return j >= len(isNotPrint) || isNotPrint[j] != rr
+ 	}
+ 
+-	rr, isPrint, isNotPrint := uint32(r), isPrint32, isNotPrint32
++	rr, isPrint, isNotPrint := uint32(r), isPrint32[:], isNotPrint32[:]
+ 	i := bsearch32(isPrint, rr)
+ 	if i >= len(isPrint) || rr < isPrint[i&^1] || isPrint[i|1] < rr {
+ 		return false
+@@ -541,6 +541,6 @@ func isInGraphicList(r rune) bool {
+ 		return false
+ 	}
+ 	rr := uint16(r)
+-	i := bsearch16(isGraphic, rr)
++	i := bsearch16(isGraphic[:], rr)
+ 	return i < len(isGraphic) && rr == isGraphic[i]
+ }
 diff --git a/src/syscall/asm_linux_thumb.s b/src/syscall/asm_linux_thumb.s
 new file mode 100644
 index 0000000000..458e9cce79
@@ -62246,6 +62732,204 @@ index 0000000000..65543193e1
 +
 +func rawVforkSyscall(trap, a1 uintptr) (r1 uintptr, err Errno) {
 +	panic("not implemented")
++}
+diff --git a/src/syscall/syscall_noos.go b/src/syscall/syscall_noos.go
+new file mode 100644
+index 0000000000..3d27ab557a
+--- /dev/null
++++ b/src/syscall/syscall_noos.go
+@@ -0,0 +1,192 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package syscall
++
++import (
++	"internal/oserror"
++	"sync"
++)
++
++var (
++	Stdin  = 0
++	Stdout = 1
++	Stderr = 2
++)
++
++type Errno uintptr
++
++const (
++	EAGAIN       Errno = 1
++	ENOTSUP      Errno = 2
++	EINVAL       Errno = 3
++	ENOENT       Errno = 4
++	EACCES       Errno = 5
++	EPERM        Errno = 6
++	EEXIST       Errno = 7
++	ENOTEMPTY    Errno = 8
++	EISDIR       Errno = 9
++	ENOTDIR      Errno = 10
++	ENAMETOOLONG Errno = 11
++)
++
++var errors = [...]string{
++	EAGAIN:       "resource temporarily unavailable",
++	ENOTSUP:      "operation not supported",
++	EINVAL:       "invalid argument",
++	ENOENT:       "no such file or directory",
++	EACCES:       "permission denied",
++	EPERM:        "operation not permitted",
++	EEXIST:       "file exists",
++	ENOTEMPTY:    "directory not empty",
++	EISDIR:       "is a directory",
++	ENOTDIR:      "not a directory",
++	ENAMETOOLONG: "file name too long",
++}
++
++func (e Errno) Is(target error) bool {
++	switch target {
++	case oserror.ErrPermission:
++		return e == EACCES || e == EPERM
++	case oserror.ErrExist:
++		return e == EEXIST || e == ENOTEMPTY
++	case oserror.ErrNotExist:
++		return e == ENOENT
++	}
++	return false
++}
++
++func (e Errno) Error() string {
++	if 0 <= int(e) && int(e) < len(errors) {
++		s := errors[e]
++		if s != "" {
++			return s
++		}
++	}
++	return "errno " + itoa(int(e))
++}
++
++type Timespec struct {
++	Sec  int64
++	Nsec int64
++}
++
++type Timeval struct {
++	Sec  int32
++	Usec int32
++}
++
++var env = struct {
++	mx   sync.RWMutex
++	dict map[string]string
++}{dict: map[string]string{
++	"HOME": "/tmp",
++}}
++
++func Setenv(key, value string) error {
++	env.mx.Lock()
++	env.dict[key] = value
++	env.mx.Unlock()
++	return nil
++}
++
++func Getenv(key string) (value string, found bool) {
++	env.mx.RLock()
++	val, ok := env.dict[key]
++	env.mx.RUnlock()
++	return val, ok
++}
++
++func Unsetenv(key string) error {
++	env.mx.Lock()
++	delete(env.dict, key)
++	env.mx.Unlock()
++	return nil
++}
++
++func Clearenv() {
++	env.mx.Lock()
++	for key := range env.dict {
++		delete(env.dict, key)
++	}
++	env.mx.Unlock()
++}
++
++func Environ() []string {
++	env.mx.RLock()
++	a := make([]string, 0, len(env.dict))
++	for key, val := range env.dict {
++		a = append(a, key+"="+val)
++	}
++	env.mx.RUnlock()
++	return a
++}
++
++type SysProcAttr struct{}
++
++const (
++	O_RDONLY = 0x0
++	O_WRONLY = 0x1
++	O_RDWR   = 0x2
++	O_CREAT  = 0x40
++	O_EXCL   = 0x80
++	O_TRUNC  = 0x200
++	O_APPEND = 0x400
++	O_SYNC   = 0x101000
++)
++
++type Qid struct {
++	Path uint64 // the file server's unique identification for the file
++}
++
++type Dir struct {
++	// system-modified data
++	Type uint16 // server type
++	Dev  uint32 // server subtype
++
++	// file data
++	Qid Qid // unique id from server
++}
++
++func Getpid() int {
++	return 1
++}
++
++func Getppid() int {
++	return 1
++}
++
++func Mkdir(path string, mode uint32) (err error) {
++	return ENOTSUP
++}
++
++func Chdir(path string) error {
++	return ENOTSUP
++}
++
++const ImplementsGetwd = true
++
++func Getwd() (wd string, err error) {
++	return "", ENOTSUP
++}
++
++func Getuid() int {
++	return -1
++}
++
++func Geteuid() int {
++	return -1
++}
++
++func Getgid() int {
++	return -1
++}
++
++func Getegid() int {
++	return -1
++}
++
++func Getgroups() (gids []int, err error) {
++	return nil, ENOTSUP
 +}
 diff --git a/src/syscall/zerrors_linux_thumb.go b/src/syscall/zerrors_linux_thumb.go
 new file mode 100644
@@ -66525,6 +67209,51 @@ index 0000000000..c2ccf694d8
 +	TCGETS   = 0x5401
 +	TCSETS   = 0x5402
 +)
+diff --git a/src/time/sys_noos.go b/src/time/sys_noos.go
+new file mode 100644
+index 0000000000..b38a3a9c97
+--- /dev/null
++++ b/src/time/sys_noos.go
+@@ -0,0 +1,22 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package time
++
++import "syscall"
++
++func open(name string) (uintptr, error) {
++	return 0, syscall.ENOENT
++}
++
++func closefd(fd uintptr) {
++}
++
++func read(fd uintptr, buf []byte) (int, error) {
++	return 0, syscall.EINVAL
++}
++
++func preadn(fd uintptr, buf []byte, off int) error {
++	return syscall.EINVAL
++}
+diff --git a/src/time/zoneinfo_noos.go b/src/time/zoneinfo_noos.go
+new file mode 100644
+index 0000000000..a80d5933dd
+--- /dev/null
++++ b/src/time/zoneinfo_noos.go
+@@ -0,0 +1,11 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package time
++
++var zoneSources = []string{}
++
++func initLocal() {
++	localLoc = *UTC
++}
 diff --git a/src/vendor/golang.org/x/sys/cpu/cpu_arm.go b/src/vendor/golang.org/x/sys/cpu/cpu_armt.go
 similarity index 91%
 rename from src/vendor/golang.org/x/sys/cpu/cpu_arm.go
