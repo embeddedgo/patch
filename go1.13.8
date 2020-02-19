@@ -36463,7 +36463,7 @@ index 487c9260e8..ba15812ba9 100644
  	ArchWasm,
  }
 diff --git a/src/cmd/link/internal/ld/data.go b/src/cmd/link/internal/ld/data.go
-index 8e35f5c9dc..869ce832d9 100644
+index 8e35f5c9dc..81ab05be36 100644
 --- a/src/cmd/link/internal/ld/data.go
 +++ b/src/cmd/link/internal/ld/data.go
 @@ -126,7 +126,7 @@ func trampoline(ctxt *Link, s *sym.Symbol) {
@@ -36505,13 +36505,17 @@ index 8e35f5c9dc..869ce832d9 100644
  	}
  }
  
-@@ -1208,6 +1211,46 @@ func (ctxt *Link) dodata() {
+@@ -1208,6 +1211,50 @@ func (ctxt *Link) dodata() {
  		}
  	}
  
 +	if ctxt.HeadType == objabi.Hnoos {
 +		// leave some read-only variables in Flash (hack to save some RAM)
 +		for _, s := range ctxt.Syms.Allsym {
++			if strings.HasPrefix(s.Name, "unicode..stmp_") {
++				s.Type = sym.SRODATA
++				continue
++			}
 +			switch s.Name {
 +			case "embedded/rtos.errorsByNumber",
 +				"math.mPi4", "math._tanP", "math._tanQ", "math._lgamA",
@@ -36552,7 +36556,7 @@ index 8e35f5c9dc..869ce832d9 100644
  	// Collect data symbols by type into data.
  	var data [sym.SXREF][]*sym.Symbol
  	for _, s := range ctxt.Syms.Allsym {
-@@ -1544,6 +1587,13 @@ func (ctxt *Link) dodata() {
+@@ -1544,6 +1591,13 @@ func (ctxt *Link) dodata() {
  		ctxt.Syms.Lookup("runtime.types", 0).Sect = sect
  		ctxt.Syms.Lookup("runtime.etypes", 0).Sect = sect
  	}
@@ -36566,7 +36570,7 @@ index 8e35f5c9dc..869ce832d9 100644
  	for _, symn := range sym.ReadOnly {
  		align := dataMaxAlign[symn]
  		if sect.Align < align {
-@@ -2160,9 +2210,11 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2160,9 +2214,11 @@ func (ctxt *Link) address() []*sym.Segment {
  	order = append(order, &Segtext)
  	Segtext.Rwx = 05
  	Segtext.Vaddr = va
@@ -36578,7 +36582,7 @@ index 8e35f5c9dc..869ce832d9 100644
  		va += s.Length
  	}
  
-@@ -2190,9 +2242,11 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2190,9 +2246,11 @@ func (ctxt *Link) address() []*sym.Segment {
  		order = append(order, &Segrodata)
  		Segrodata.Rwx = 04
  		Segrodata.Vaddr = va
@@ -36590,7 +36594,7 @@ index 8e35f5c9dc..869ce832d9 100644
  			va += s.Length
  		}
  
-@@ -2210,9 +2264,11 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2210,9 +2268,11 @@ func (ctxt *Link) address() []*sym.Segment {
  		order = append(order, &Segrelrodata)
  		Segrelrodata.Rwx = 06
  		Segrelrodata.Vaddr = va
@@ -36602,7 +36606,7 @@ index 8e35f5c9dc..869ce832d9 100644
  			va += s.Length
  		}
  
-@@ -2220,15 +2276,30 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2220,15 +2280,30 @@ func (ctxt *Link) address() []*sym.Segment {
  	}
  
  	va = uint64(Rnd(int64(va), int64(*FlagRound)))
@@ -36638,7 +36642,7 @@ index 8e35f5c9dc..869ce832d9 100644
  	var data *sym.Section
  	var noptr *sym.Section
  	var bss *sym.Section
-@@ -2242,13 +2313,16 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2242,13 +2317,16 @@ func (ctxt *Link) address() []*sym.Segment {
  			vlen = int64(Segdata.Sections[i+1].Vaddr - s.Vaddr)
  		}
  		s.Vaddr = va
@@ -36655,7 +36659,7 @@ index 8e35f5c9dc..869ce832d9 100644
  		}
  		if s.Name == ".bss" {
  			bss = s
-@@ -2263,18 +2337,23 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2263,18 +2341,23 @@ func (ctxt *Link) address() []*sym.Segment {
  	Segdata.Filelen = bss.Vaddr - Segdata.Vaddr
  
  	va = uint64(Rnd(int64(va), int64(*FlagRound)))
@@ -36679,7 +36683,7 @@ index 8e35f5c9dc..869ce832d9 100644
  		}
  		Segdwarf.Length = va - Segdwarf.Vaddr
  	}
-@@ -2370,6 +2449,14 @@ func (ctxt *Link) address() []*sym.Segment {
+@@ -2370,6 +2453,14 @@ func (ctxt *Link) address() []*sym.Segment {
  	ctxt.xdefine("runtime.enoptrbss", sym.SNOPTRBSS, int64(noptrbss.Vaddr+noptrbss.Length))
  	ctxt.xdefine("runtime.end", sym.SBSS, int64(Segdata.Vaddr+Segdata.Length))
  
@@ -36694,7 +36698,7 @@ index 8e35f5c9dc..869ce832d9 100644
  	return order
  }
  
-@@ -2386,7 +2473,7 @@ func (ctxt *Link) layout(order []*sym.Segment) uint64 {
+@@ -2386,7 +2477,7 @@ func (ctxt *Link) layout(order []*sym.Segment) uint64 {
  				// Assuming the previous segment was
  				// aligned, the following rounding
  				// should ensure that this segment's
@@ -36703,7 +36707,7 @@ index 8e35f5c9dc..869ce832d9 100644
  				seg.Fileoff = uint64(Rnd(int64(prev.Fileoff+prev.Filelen), int64(*FlagRound)))
  				if seg.Vaddr%uint64(*FlagRound) != seg.Fileoff%uint64(*FlagRound) {
  					Exitf("bad segment rounding (Vaddr=%#x Fileoff=%#x FlagRound=%#x)", seg.Vaddr, seg.Fileoff, *FlagRound)
-@@ -2450,7 +2537,7 @@ func compressSyms(ctxt *Link, syms []*sym.Symbol) []byte {
+@@ -2450,7 +2541,7 @@ func compressSyms(ctxt *Link, syms []*sym.Symbol) []byte {
  			s.P = ctxt.relocbuf
  			s.Attr.Set(sym.AttrReadOnly, false)
  		}
