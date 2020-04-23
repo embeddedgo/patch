@@ -642,7 +642,7 @@ index 0000000000..2947e04a57
 +	B   (R14)  // 4770
 +
 diff --git a/src/cmd/cgo/gcc.go b/src/cmd/cgo/gcc.go
-index fcab494ea0..52d76a0248 100644
+index c4128e9502..eb7ea4825a 100644
 --- a/src/cmd/cgo/gcc.go
 +++ b/src/cmd/cgo/gcc.go
 @@ -1548,6 +1548,8 @@ func (p *Package) gccMachine() []string {
@@ -48848,7 +48848,7 @@ index 0000000000..e110659f27
 +// copied from /home/michal/P/go/goroot/src/runtime/stubs.go
 +func bool2int(x bool) int { return int(uint8(*(*uint8)(unsafe.Pointer(&x)))) }
 diff --git a/src/go/build/deps_test.go b/src/go/build/deps_test.go
-index a64c2b3241..a106d7dade 100644
+index 8eed6260a2..25cd91f897 100644
 --- a/src/go/build/deps_test.go
 +++ b/src/go/build/deps_test.go
 @@ -36,9 +36,9 @@ var pkgDeps = map[string][]string{
@@ -48863,7 +48863,7 @@ index a64c2b3241..a106d7dade 100644
  	"runtime/internal/math":   {"runtime/internal/sys"},
  	"internal/race":           {"runtime", "unsafe"},
  	"sync":                    {"internal/race", "runtime", "sync/atomic", "unsafe"},
-@@ -452,6 +452,22 @@ var pkgDeps = map[string][]string{
+@@ -453,6 +453,22 @@ var pkgDeps = map[string][]string{
  	"net/http/pprof":    {"L4", "OS", "html/template", "net/http", "runtime/pprof", "runtime/trace"},
  	"net/rpc":           {"L4", "NET", "encoding/gob", "html/template", "net/http", "go/token"},
  	"net/rpc/jsonrpc":   {"L4", "NET", "encoding/json", "net/rpc"},
@@ -55818,7 +55818,7 @@ index 5f92e7480e..01aeff01c4 100644
  		maxBlock = 64 << 10 // VM reservation granularity is 64K on windows
  	)
 diff --git a/src/runtime/mbitmap.go b/src/runtime/mbitmap.go
-index 55c0282403..262250f2c5 100644
+index 2045789fa4..e251fc5a39 100644
 --- a/src/runtime/mbitmap.go
 +++ b/src/runtime/mbitmap.go
 @@ -868,39 +868,39 @@ func (h heapBits) clearCheckmarkSpan(size, n, total uintptr) {
@@ -56265,7 +56265,7 @@ index f9dd6ca474..4741f7ee19 100644
  
  	v := unsafe.Pointer(f.chunk)
 diff --git a/src/runtime/mgc.go b/src/runtime/mgc.go
-index 604d7d09b4..1fa0e8a1e7 100644
+index d034986cf4..76d74ca0af 100644
 --- a/src/runtime/mgc.go
 +++ b/src/runtime/mgc.go
 @@ -137,7 +137,7 @@ import (
@@ -56301,7 +56301,7 @@ index 604d7d09b4..1fa0e8a1e7 100644
  	}
 -	return 100
 +	if _MCU != 0 {
-+		return 10
++		return 50
 +	} else {
 +		return 100
 +	}
@@ -56319,7 +56319,7 @@ index 604d7d09b4..1fa0e8a1e7 100644
  	}
  
  	// Compute the background mark utilization goal. In general,
-@@ -1777,10 +1781,17 @@ func gcMarkTermination(nextTriggerRatio float64) {
+@@ -1785,10 +1789,17 @@ func gcMarkTermination(nextTriggerRatio float64) {
  			}
  			print(string(fmtNSAsMS(sbuf[:], uint64(ns))))
  		}
@@ -57866,10 +57866,10 @@ index 0000000000..34c95fac83
 +	return 0
 +}
 diff --git a/src/runtime/panic.go b/src/runtime/panic.go
-index 28b5cbefcc..9f0aaa4911 100644
+index 615249f33c..9dbbff82ab 100644
 --- a/src/runtime/panic.go
 +++ b/src/runtime/panic.go
-@@ -1146,6 +1146,9 @@ func recovery(gp *g) {
+@@ -1148,6 +1148,9 @@ func recovery(gp *g) {
  	// this time returning 1. The calling function will
  	// jump to the standard return epilogue.
  	gp.sched.sp = sp
@@ -57879,7 +57879,7 @@ index 28b5cbefcc..9f0aaa4911 100644
  	gp.sched.pc = pc
  	gp.sched.lr = 0
  	gp.sched.ret = 1
-@@ -1416,5 +1419,5 @@ func shouldPushSigpanic(gp *g, pc, lr uintptr) bool {
+@@ -1418,5 +1421,5 @@ func shouldPushSigpanic(gp *g, pc, lr uintptr) bool {
  //
  //go:nosplit
  func isAbortPC(pc uintptr) bool {
