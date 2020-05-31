@@ -2,10 +2,11 @@ This repository contains patches that can be used to add Embedded Go supported a
 
 Currently supported architectures:
 
-| GOOS/GOARCH | Target                                       |
-| ----------- | ---------------------------------------------|
-| linux/thumb | Linux on ARMv7-A (mainly for tests)          |
-| noos/thumb  | ARMv7-M microcontrollers (nFR52, STM32, ...) |
+| GOOS/GOARCH  | Target                                       |
+| ------------ | ---------------------------------------------|
+| linux/thumb  | Linux on ARMv7-A (mainly for tests)          |
+| noos/thumb   | ARMv7-M microcontrollers (nFR52, STM32, ...) |
+| noos/riscv64 | RISCV64G SOCs (tested on Kendryte K210)      |
 
 #### How to install
 
@@ -25,8 +26,8 @@ git clone https://go.googlesource.com/go goroot
 
 ```
 cd goroot
-git checkout go1.14.2
-patch -p1 <../patch/go1.14.2
+git checkout go1.14.3
+patch -p1 <../patch/go1.14.3
 cd src
 ./all.bash
 ```
