@@ -1013,6 +1013,100 @@ index b8b954c4fc..afb97b6d97 100644
  		if src.IsFloat() {
  			switch dst.Etype {
  			case TINT64, TUINT64:
+diff --git a/src/cmd/compile/internal/riscv64/ggen.go b/src/cmd/compile/internal/riscv64/ggen.go
+index be31fad441..f7c03fe7c2 100644
+--- a/src/cmd/compile/internal/riscv64/ggen.go
++++ b/src/cmd/compile/internal/riscv64/ggen.go
+@@ -25,7 +25,15 @@ func zeroRange(pp *gc.Progs, p *obj.Prog, off, cnt int64, _ *uint32) *obj.Prog {
+ 		return p
+ 	}
+ 
+-	// TODO(jsing): Add a duff zero implementation for medium sized ranges.
++	if cnt <= int64(128*gc.Widthptr) {
++		p = pp.Appendpp(p, riscv.AADDI, obj.TYPE_CONST, 0, off, obj.TYPE_REG, riscv.REG_A0, 0)
++		p.Reg = riscv.REG_SP
++		p = pp.Appendpp(p, obj.ADUFFZERO, obj.TYPE_NONE, 0, 0, obj.TYPE_MEM, 0, 0)
++		p.To.Name = obj.NAME_EXTERN
++		p.To.Sym = gc.Duffzero
++		p.To.Offset = 8 * (128 - cnt/int64(gc.Widthptr))
++		return p
++	}
+ 
+ 	// Loop, zeroing pointer width bytes at a time.
+ 	// ADD	$(off), SP, T0
+diff --git a/src/cmd/compile/internal/riscv64/ssa.go b/src/cmd/compile/internal/riscv64/ssa.go
+index d33240351f..1409aa0a04 100644
+--- a/src/cmd/compile/internal/riscv64/ssa.go
++++ b/src/cmd/compile/internal/riscv64/ssa.go
+@@ -10,6 +10,7 @@ import (
+ 	"cmd/compile/internal/types"
+ 	"cmd/internal/obj"
+ 	"cmd/internal/obj/riscv"
++	"cmd/internal/objabi"
+ )
+ 
+ // ssaRegToReg maps ssa register numbers to obj register numbers.
+@@ -400,16 +401,20 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
+ 		gc.Patch(p5, p)
+ 
+ 	case ssa.OpRISCV64LoweredNilCheck:
+-		// Issue a load which will fault if arg is nil.
+-		// TODO: optimizations. See arm and amd64 LoweredNilCheck.
+-		p := s.Prog(riscv.AMOVB)
+-		p.From.Type = obj.TYPE_MEM
+-		p.From.Reg = v.Args[0].Reg()
+-		gc.AddAux(&p.From, v)
+-		p.To.Type = obj.TYPE_REG
+-		p.To.Reg = riscv.REG_ZERO
+-		if gc.Debug_checknil != 0 && v.Pos.Line() > 1 { // v.Pos == 1 in generated wrappers
+-			gc.Warnl(v.Pos, "generated nil check")
++		if objabi.GOOS == "noos" {
++			// BUG: avoid nil check because of MMIO
++		} else {
++			// Issue a load which will fault if arg is nil.
++			// TODO: optimizations. See arm and amd64 LoweredNilCheck.
++			p := s.Prog(riscv.AMOVB)
++			p.From.Type = obj.TYPE_MEM
++			p.From.Reg = v.Args[0].Reg()
++			gc.AddAux(&p.From, v)
++			p.To.Type = obj.TYPE_REG
++			p.To.Reg = riscv.REG_ZERO
++			if gc.Debug_checknil != 0 && v.Pos.Line() > 1 { // v.Pos == 1 in generated wrappers
++				gc.Warnl(v.Pos, "generated nil check")
++			}
+ 		}
+ 
+ 	case ssa.OpRISCV64LoweredGetClosurePtr:
+@@ -430,6 +435,20 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
+ 		p.To.Type = obj.TYPE_REG
+ 		p.To.Reg = v.Reg()
+ 
++	case ssa.OpRISCV64DUFFZERO:
++		p := s.Prog(obj.ADUFFZERO)
++		p.To.Type = obj.TYPE_MEM
++		p.To.Name = obj.NAME_EXTERN
++		p.To.Sym = gc.Duffzero
++		p.To.Offset = v.AuxInt
++
++	case ssa.OpRISCV64DUFFCOPY:
++		p := s.Prog(obj.ADUFFCOPY)
++		p.To.Type = obj.TYPE_MEM
++		p.To.Name = obj.NAME_EXTERN
++		p.To.Sym = gc.Duffcopy
++		p.To.Offset = v.AuxInt
++
+ 	default:
+ 		v.Fatalf("Unhandled op %v", v.Op)
+ 	}
+@@ -464,7 +483,7 @@ func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
+ 	case ssa.BlockRet:
+ 		s.Prog(obj.ARET)
+ 	case ssa.BlockRetJmp:
+-		p := s.Prog(obj.AJMP)
++		p := s.Prog(obj.ARET)
+ 		p.To.Type = obj.TYPE_MEM
+ 		p.To.Name = obj.NAME_EXTERN
+ 		p.To.Sym = b.Aux.(*obj.LSym)
 diff --git a/src/cmd/compile/internal/ssa/config.go b/src/cmd/compile/internal/ssa/config.go
 index b51dfcb1f5..33ee8ca41c 100644
 --- a/src/cmd/compile/internal/ssa/config.go
@@ -1035,6 +1129,84 @@ index b51dfcb1f5..33ee8ca41c 100644
  	case "arm64":
  		c.PtrSize = 8
  		c.RegSize = 8
+diff --git a/src/cmd/compile/internal/ssa/gen/RISCV64.rules b/src/cmd/compile/internal/ssa/gen/RISCV64.rules
+index 5331c73259..a885794e4e 100644
+--- a/src/cmd/compile/internal/ssa/gen/RISCV64.rules
++++ b/src/cmd/compile/internal/ssa/gen/RISCV64.rules
+@@ -379,6 +379,13 @@
+ (Zero [4] ptr mem) -> (MOVWstore ptr (MOVWconst) mem)
+ (Zero [8] ptr mem) -> (MOVDstore ptr (MOVDconst) mem)
+ 
++// Medium zeroing uses a duff device
++// 8, and 128 are magic constants, see runtime/mkduff.go
++(Zero [s] {t} ptr mem)
++	&& s%8 == 0 && s > 24 && s <= 8*128
++	&& t.(*types.Type).Alignment()%8 == 0 && !config.noDuffDevice ->
++	(DUFFZERO [8 * (128 - s/8)] ptr mem)
++
+ // Generic zeroing uses a loop
+ (Zero [s] {t} ptr mem) ->
+ 	(LoweredZero [t.(*types.Type).Alignment()]
+@@ -414,6 +421,12 @@
+ (Move [4] dst src mem) -> (MOVWstore dst (MOVWload src mem) mem)
+ (Move [8] dst src mem) -> (MOVDstore dst (MOVDload src mem) mem)
+ 
++// Medium move uses a duff device
++(Move [s] {t} dst src mem)
++	&& s%8 == 0 && s >= 24 && s <= 8*128 && t.(*types.Type).Alignment()%8 == 0
++	&& !config.noDuffDevice ->
++	(DUFFCOPY [16 * (128 - s/8)] dst src mem)
++
+ // Generic move uses a loop
+ (Move [s] {t} dst src mem) ->
+ 	(LoweredMove [t.(*types.Type).Alignment()]
+diff --git a/src/cmd/compile/internal/ssa/gen/RISCV64Ops.go b/src/cmd/compile/internal/ssa/gen/RISCV64Ops.go
+index 88a97e43fd..f1b5f86cd1 100644
+--- a/src/cmd/compile/internal/ssa/gen/RISCV64Ops.go
++++ b/src/cmd/compile/internal/ssa/gen/RISCV64Ops.go
+@@ -204,6 +204,42 @@ func init() {
+ 		{name: "CALLclosure", argLength: 3, reg: callClosure, aux: "Int64", call: true},             // call function via closure. arg0=codeptr, arg1=closure, arg2=mem, auxint=argsize, returns mem
+ 		{name: "CALLinter", argLength: 2, reg: callInter, aux: "Int64", call: true},                 // call fn by pointer. arg0=codeptr, arg1=mem, auxint=argsize, returns mem
+ 
++		// duffzero
++		// arg0 = address of memory to zero (A0, changed as side effect)
++		// arg1 = mem
++		// auxint = offset into duffzero code to start executing
++		// returns mem
++		{
++			name:      "DUFFZERO",
++			aux:       "Int64",
++			argLength: 2,
++			reg: regInfo{
++				inputs:   []regMask{regNamed["X10"]},
++				clobbers: regNamed["X1"] | regNamed["X10"],
++			},
++			typ:            "Mem",
++			faultOnNilArg0: true,
++		},
++
++		// duffcopy
++		// arg0 = address of dst memory (in X11, changed as side effect)
++		// arg1 = address of src memory (in X10, changed as side effect)
++		// arg2 = mem
++		// auxint = offset into duffcopy code to start executing
++		// returns mem
++		{
++			name:      "DUFFCOPY",
++			aux:       "Int64",
++			argLength: 3,
++			reg: regInfo{
++				inputs:   []regMask{regNamed["X11"], regNamed["X10"]},
++				clobbers: regNamed["X1"] | regNamed["X10"] | regNamed["X11"] | regNamed["X12"],
++			},
++			typ:            "Mem",
++			faultOnNilArg0: true,
++			faultOnNilArg1: true,
++		},
++
+ 		// Generic moves and zeros
+ 
+ 		// general unaligned zeroing
 diff --git a/src/cmd/compile/internal/ssa/gen/Thumb.rules b/src/cmd/compile/internal/ssa/gen/Thumb.rules
 new file mode 100644
 index 0000000000..b0639c509f
@@ -2982,7 +3154,7 @@ index b638d98887..49d30acdf1 100644
  	{name: "Clobber", argLength: 0, typ: "Void", aux: "SymOff", symEffect: "None"}, // write an invalid pointer value to the given pointer slot of a stack variable
  }
 diff --git a/src/cmd/compile/internal/ssa/opGen.go b/src/cmd/compile/internal/ssa/opGen.go
-index 86428a3e84..6df0ad6599 100644
+index 86428a3e84..01027a09f2 100644
 --- a/src/cmd/compile/internal/ssa/opGen.go
 +++ b/src/cmd/compile/internal/ssa/opGen.go
 @@ -10,6 +10,7 @@ import (
@@ -3029,7 +3201,16 @@ index 86428a3e84..6df0ad6599 100644
  	BlockPlain:  "Plain",
  	BlockIf:     "If",
  	BlockDefer:  "Defer",
-@@ -2208,6 +2231,241 @@ const (
+@@ -1935,6 +1958,8 @@ const (
+ 	OpRISCV64CALLstatic
+ 	OpRISCV64CALLclosure
+ 	OpRISCV64CALLinter
++	OpRISCV64DUFFZERO
++	OpRISCV64DUFFCOPY
+ 	OpRISCV64LoweredZero
+ 	OpRISCV64LoweredMove
+ 	OpRISCV64LoweredNilCheck
+@@ -2208,6 +2233,241 @@ const (
  	OpS390XLoweredMove
  	OpS390XLoweredZero
  
@@ -3271,7 +3452,7 @@ index 86428a3e84..6df0ad6599 100644
  	OpWasmLoweredStaticCall
  	OpWasmLoweredClosureCall
  	OpWasmLoweredInterCall
-@@ -2684,6 +2942,14 @@ const (
+@@ -2684,6 +2944,14 @@ const (
  	OpAtomicOr8
  	OpAtomicAdd32Variant
  	OpAtomicAdd64Variant
@@ -3286,7 +3467,40 @@ index 86428a3e84..6df0ad6599 100644
  	OpClobber
  )
  
-@@ -29162,470 +29428,3667 @@ var opcodeTable = [...]opInfo{
+@@ -25745,6 +26013,32 @@ var opcodeTable = [...]opInfo{
+ 			clobbers: 9223372035781033980, // X3 g X5 X6 X7 X8 X9 X10 X11 X12 X13 X14 X15 X16 X17 X18 X19 X20 X21 X22 X23 X24 X25 X26 X27 X28 X29 X30 F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 F16 F17 F18 F19 F20 F21 F22 F23 F24 F25 F26 F27 F28 F29 F30 F31
+ 		},
+ 	},
++	{
++		name:           "DUFFZERO",
++		auxType:        auxInt64,
++		argLen:         2,
++		faultOnNilArg0: true,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 512}, // X10
++			},
++			clobbers: 512, // X10
++		},
++	},
++	{
++		name:           "DUFFCOPY",
++		auxType:        auxInt64,
++		argLen:         3,
++		faultOnNilArg0: true,
++		faultOnNilArg1: true,
++		reg: regInfo{
++			inputs: []inputInfo{
++				{0, 1024}, // X11
++				{1, 512},  // X10
++			},
++			clobbers: 3584, // X10 X11 X12
++		},
++	},
+ 	{
+ 		name:           "LoweredZero",
+ 		auxType:        auxInt64,
+@@ -29162,470 +29456,3667 @@ var opcodeTable = [...]opInfo{
  		},
  	},
  	{
@@ -7379,7 +7593,7 @@ index 86428a3e84..6df0ad6599 100644
  		},
  	},
  
-@@ -33090,6 +36553,54 @@ var opcodeTable = [...]opInfo{
+@@ -33090,6 +36581,54 @@ var opcodeTable = [...]opInfo{
  		hasSideEffects: true,
  		generic:        true,
  	},
@@ -7434,7 +7648,7 @@ index 86428a3e84..6df0ad6599 100644
  	{
  		name:      "Clobber",
  		auxType:   auxSymOff,
-@@ -33590,6 +37101,46 @@ var fpRegMaskS390X = regMask(4294901760)
+@@ -33590,6 +37129,46 @@ var fpRegMaskS390X = regMask(4294901760)
  var specialRegMaskS390X = regMask(0)
  var framepointerRegS390X = int8(-1)
  var linkRegS390X = int8(14)
@@ -7517,6 +7731,60 @@ index 539941001d..00f2b917a2 100644
  		return sz <= 4
  	}
  	return false
+diff --git a/src/cmd/compile/internal/ssa/rewriteRISCV64.go b/src/cmd/compile/internal/ssa/rewriteRISCV64.go
+index 8ccfaa54f9..14ca8af148 100644
+--- a/src/cmd/compile/internal/ssa/rewriteRISCV64.go
++++ b/src/cmd/compile/internal/ssa/rewriteRISCV64.go
+@@ -2709,6 +2709,25 @@ func rewriteValueRISCV64_OpMove_0(v *Value) bool {
+ 		return true
+ 	}
+ 	// match: (Move [s] {t} dst src mem)
++	// cond: s%8 == 0 && s >= 24 && s <= 8*128 && t.(*types.Type).Alignment()%8 == 0 && !config.noDuffDevice
++	// result: (DUFFCOPY [16 * (128 - s/8)] dst src mem)
++	for {
++		s := v.AuxInt
++		t := v.Aux
++		mem := v.Args[2]
++		dst := v.Args[0]
++		src := v.Args[1]
++		if !(s%8 == 0 && s >= 24 && s <= 8*128 && t.(*types.Type).Alignment()%8 == 0 && !config.noDuffDevice) {
++			break
++		}
++		v.reset(OpRISCV64DUFFCOPY)
++		v.AuxInt = 16 * (128 - s/8)
++		v.AddArg(dst)
++		v.AddArg(src)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (Move [s] {t} dst src mem)
+ 	// result: (LoweredMove [t.(*types.Type).Alignment()] dst src (ADDI <src.Type> [s-moveSize(t.(*types.Type).Alignment(), config)] src) mem)
+ 	for {
+ 		s := v.AuxInt
+@@ -5430,6 +5449,23 @@ func rewriteValueRISCV64_OpZero_0(v *Value) bool {
+ 		return true
+ 	}
+ 	// match: (Zero [s] {t} ptr mem)
++	// cond: s%8 == 0 && s > 24 && s <= 8*128 && t.(*types.Type).Alignment()%8 == 0 && !config.noDuffDevice
++	// result: (DUFFZERO [8 * (128 - s/8)] ptr mem)
++	for {
++		s := v.AuxInt
++		t := v.Aux
++		mem := v.Args[1]
++		ptr := v.Args[0]
++		if !(s%8 == 0 && s > 24 && s <= 8*128 && t.(*types.Type).Alignment()%8 == 0 && !config.noDuffDevice) {
++			break
++		}
++		v.reset(OpRISCV64DUFFZERO)
++		v.AuxInt = 8 * (128 - s/8)
++		v.AddArg(ptr)
++		v.AddArg(mem)
++		return true
++	}
++	// match: (Zero [s] {t} ptr mem)
+ 	// result: (LoweredZero [t.(*types.Type).Alignment()] ptr (ADD <ptr.Type> ptr (MOVDconst [s-moveSize(t.(*types.Type).Alignment(), config)])) mem)
+ 	for {
+ 		s := v.AuxInt
 diff --git a/src/cmd/compile/internal/ssa/rewriteThumb.go b/src/cmd/compile/internal/ssa/rewriteThumb.go
 new file mode 100644
 index 0000000000..c13f85592d
@@ -30318,9 +30586,27 @@ index 7579dd0390..a3bc2cdf61 100644
  	ctxt.Text = append(ctxt.Text, s)
  
 diff --git a/src/cmd/internal/obj/riscv/obj.go b/src/cmd/internal/obj/riscv/obj.go
-index 1d2c498110..8f445daac9 100644
+index 1d2c498110..324222771c 100644
 --- a/src/cmd/internal/obj/riscv/obj.go
 +++ b/src/cmd/internal/obj/riscv/obj.go
+@@ -33,7 +33,7 @@ func buildop(ctxt *obj.Link) {}
+ // lr is the link register to use for the JALR.
+ // p must be a CALL, JMP or RET.
+ func jalrToSym(ctxt *obj.Link, p *obj.Prog, newprog obj.ProgAlloc, lr int16) *obj.Prog {
+-	if p.As != obj.ACALL && p.As != obj.AJMP && p.As != obj.ARET {
++	if p.As != obj.ACALL && p.As != obj.AJMP && p.As != obj.ARET && p.As != obj.ADUFFZERO && p.As != obj.ADUFFCOPY {
+ 		ctxt.Diag("unexpected Prog in jalrToSym: %v", p)
+ 		return p
+ 	}
+@@ -512,7 +512,7 @@ func containsCall(sym *obj.LSym) bool {
+ 	// CALLs are CALL or JAL(R) with link register LR.
+ 	for p := sym.Func.Text; p != nil; p = p.Link {
+ 		switch p.As {
+-		case obj.ACALL:
++		case obj.ACALL, obj.ADUFFZERO, obj.ADUFFCOPY:
+ 			return true
+ 		case AJAL, AJALR:
+ 			if p.To.Type == obj.TYPE_REG && p.To.Reg == REG_LR {
 @@ -645,6 +645,16 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym, newprog obj.ProgAlloc) {
  		prologue.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
  		prologue.Spadj = int32(stacksize)
@@ -30338,6 +30624,15 @@ index 1d2c498110..8f445daac9 100644
  		prologue = ctxt.EndUnsafePoint(prologue, newprog, -1)
  	}
  
+@@ -749,7 +759,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym, newprog obj.ProgAlloc) {
+ 				p.From.Reg = REG_SP
+ 			}
+ 
+-		case obj.ACALL:
++		case obj.ACALL, obj.ADUFFZERO, obj.ADUFFCOPY:
+ 			switch p.To.Type {
+ 			case obj.TYPE_MEM:
+ 				jalrToSym(ctxt, p, newprog, REG_LR)
 diff --git a/src/cmd/internal/obj/textflag.go b/src/cmd/internal/obj/textflag.go
 index d2cec734b1..1b9975754b 100644
 --- a/src/cmd/internal/obj/textflag.go
@@ -57793,6 +58088,54 @@ index 0000000000..ea3c67afc5
 +
 +_return:
 +	RET
+diff --git a/src/runtime/memmove_noos_riscv64.s b/src/runtime/memmove_noos_riscv64.s
+new file mode 100755
+index 0000000000..6829cf8c98
+--- /dev/null
++++ b/src/runtime/memmove_noos_riscv64.s
+@@ -0,0 +1,29 @@
++// Copyright 2016 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++#include "textflag.h"
++
++// See memmove Go doc for important implementation constraints.
++
++// void runtime·memmove(void*, void*, uintptr)
++TEXT runtime·memmove(SB),NOSPLIT,$-0-24
++	MOV  to+0(FP), A0
++	MOV  from+8(FP), A1
++	MOV  n+16(FP), A2
++	ADD  A0, A2
++
++	// In case od noos we can't use unaligned load/stores.
++	// For now we just copy bytes.
++	// TODO: optimize this
++
++loop:
++	BEQ    A0, A2, done
++	MOVBU  (A1), S0
++	ADD    $1, A1
++	MOVB   S0, (A0)
++	ADD    $1, A0
++	JMP    loop
++
++done:
++	RET
+diff --git a/src/runtime/memmove_riscv64.s b/src/runtime/memmove_riscv64.s
+index 5dec8d0a33..aca9ca1a45 100755
+--- a/src/runtime/memmove_riscv64.s
++++ b/src/runtime/memmove_riscv64.s
+@@ -2,6 +2,8 @@
+ // Use of this source code is governed by a BSD-style
+ // license that can be found in the LICENSE file.
+ 
++// +build !noos
++
+ #include "textflag.h"
+ 
+ // See memmove Go doc for important implementation constraints.
 diff --git a/src/runtime/memmove_thumb.s b/src/runtime/memmove_thumb.s
 new file mode 100644
 index 0000000000..1790cd583d
@@ -62216,10 +62559,10 @@ index 0000000000..9ad7ba93c9
 +#define SYS_NUM          13
 diff --git a/src/runtime/tasker_noos.go b/src/runtime/tasker_noos.go
 new file mode 100644
-index 0000000000..de5c222b06
+index 0000000000..1c34d5796b
 --- /dev/null
 +++ b/src/runtime/tasker_noos.go
-@@ -0,0 +1,545 @@
+@@ -0,0 +1,546 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -62615,10 +62958,11 @@ index 0000000000..de5c222b06
 +//go:nosplit
 +func syssetsystim1() {
 +	t := curcpu().t
++	// TODO(md): this code doesn't look good, requires some thought
 +	const n = unsafe.Sizeof(t.nanotime) / unsafe.Sizeof(uintptr(0))
 +	*(*[n]uintptr)(unsafe.Pointer(&t.nanotime)) = *(*[n]uintptr)(unsafe.Pointer(&t.newnanotime))
 +	*(*[n]uintptr)(unsafe.Pointer(&t.setalarm)) = *(*[n]uintptr)(unsafe.Pointer(&t.newsetalarm))
-+	curcpuSchedule() // ensure scheduler uses new timer
++	curcpuSchedule() // ensure scheduler uses new timer: BUG(md): other CPUs?
 +}
 +
 +//go:nowritebarrierrec
