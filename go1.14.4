@@ -49066,10 +49066,10 @@ index 0000000000..211958dc58
 +}
 diff --git a/src/embedded/rtos/irq.go b/src/embedded/rtos/irq.go
 new file mode 100644
-index 0000000000..41293a0711
+index 0000000000..57568ec3ae
 --- /dev/null
 +++ b/src/embedded/rtos/irq.go
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,63 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49092,8 +49092,8 @@ index 0000000000..41293a0711
 +// same or higher priority.
 +//
 +// The IntPrioSysCall and IntPrioSysTimer are special priority levels. Do not
-+// use them to set or calclulate an interrupt priority if they are outside the
-+// [IntPrioLowest, IntPrioHighest] range.
++// use them to set or calclulate an interrupt priority if their values are
++// outside of [IntPrioLowest, IntPrioHighest] range.
 +const (
 +	IntPrioHighest = intPrioHighest
 +	IntPrioHigh    = intPrioHigh
@@ -49108,27 +49108,29 @@ index 0000000000..41293a0711
 +)
 +
 +// IRQ represents an user accessible interrupt. It provides interface to basic
-+// operations such as enabling/disabling handling of the interrupt requests and
-+// setting interrupt priorities. There can be other (system) interrupts not
-+// exposed by this interface.
++// operations such as enabling/disabling the interrupt requests and setting
++// interrupt priorities. There can be other (system) interrupts not exposed by
++// this interface.
 +type IRQ int
 +
-+// Enable sets the priority of the interrupt and enables handling interrupt
-+// requests on the CPU (core/hart) specified by cpuid. The special cpuid -1 lets
-+// the Enable to select one or more CPUs automaticaly.
-+func (irq IRQ) Enable(prio, cpuid int) error {
++// Enable sets the priority of the interrupt and enables interrupt requests in
++// the context specified by ctxid. The context has implementation specific
++// meaning, can correspond to CPU, core, hardware thread, privilege level or any
++// combination thereof. The special ctxid=-1 allows the Enable to select one or
++// more contexts automaticaly.
++func (irq IRQ) Enable(prio, ctxid int) error {
 +	return irqEnable(irq, prio)
 +}
 +
-+// Disable disables handling of interrupt requests by the CPU (core/hart)
-+// specified by cpuid. The special cpuid -1 disables irq on all CPUs.
-+func (irq IRQ) Disable(cpuid int) error {
++// Disable disables interrupt requests int the context specified by ctxid. The
++// special ctxid=-1 disables irq in all contexts.
++func (irq IRQ) Disable(ctxid int) error {
 +	return irqDisable(irq)
 +}
 +
-+// Status reports whether the irq is enabled on the CPU (core/hart) specifie by
-+// cpuid and returns its priority.
-+func (irq IRQ) Status(cpuid int) (enabled bool, prio int, err error) {
++// Status reports whether the irq is enabled in context ctxi and returns its
++// priority.
++func (irq IRQ) Status(ctxid int) (enabled bool, prio int, err error) {
 +	return irqStatus(irq)
 +}
 diff --git a/src/embedded/rtos/irq_noos.go b/src/embedded/rtos/irq_noos.go
@@ -49167,7 +49169,7 @@ index 0000000000..45e34f0508
 +func runtime_irqctl(irq, ctl int) (enabled, prio, errno int)
 diff --git a/src/embedded/rtos/irq_noos_riscv64.go b/src/embedded/rtos/irq_noos_riscv64.go
 new file mode 100644
-index 0000000000..3a42084955
+index 0000000000..75897dbb21
 --- /dev/null
 +++ b/src/embedded/rtos/irq_noos_riscv64.go
 @@ -0,0 +1,19 @@
@@ -49177,7 +49179,7 @@ index 0000000000..3a42084955
 +
 +package rtos
 +
-+// Positive numbers are PLIC priority levels. It seems the lowest number of
++// Positive numbers are PLIC priority levels. It seems the lowest number of the
 +// priority levels supported by real hardware is 7. CLIC based designs were not
 +// considered.
 +const (
@@ -49372,7 +49374,7 @@ index 0000000000..51a42abc2c
 \ No newline at end of file
 diff --git a/src/embedded/rtos/privlevel.go b/src/embedded/rtos/privlevel.go
 new file mode 100644
-index 0000000000..c442decfe5
+index 0000000000..9ef54d1994
 --- /dev/null
 +++ b/src/embedded/rtos/privlevel.go
 @@ -0,0 +1,15 @@
@@ -49384,10 +49386,10 @@ index 0000000000..c442decfe5
 +
 +// SetPrivLevel sets privilege level for current thread to newlevel. Level 0 is
 +// the most privileged and allows access to all system resources. Any resource
-+// available to level n is also available to level 0..n. If n < 0 the privilege
-+// level is not changed. SetPrivLevel returns previous level number and error.
-+// SetPrivLevel is usually preceded by runtime.LockOSThread to ensure effect for
-+// current gorutine.
++// available to the level n is also available to the level 0..n. If n < 0 the
++// privilege level is not changed. SetPrivLevel returns previous level number
++// and error. SetPrivLevel should be usually preceded by runtime.LockOSThread()
++// to ensure effect for the current goroutine.
 +func SetPrivLevel(newlevel int) (oldlevel int, err error) {
 +	return setPrivLevel(newlevel)
 +}
@@ -49515,6 +49517,66 @@ index 0000000000..1e772fefed
 +package rtos
 +
 +func setSystemTimer(nanotime func() int64, setalarm func(ns int64) bool) error {
++	return ErrNotSuppoted
++}
+diff --git a/src/embedded/rtos/syswriter.go b/src/embedded/rtos/syswriter.go
+new file mode 100644
+index 0000000000..ebf660e624
+--- /dev/null
++++ b/src/embedded/rtos/syswriter.go
+@@ -0,0 +1,9 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package rtos
++
++func SetSystemWriter(w func(fd int, p []byte) int) error {
++	return setSysWriter(w)
++}
+diff --git a/src/embedded/rtos/syswriter_noos.go b/src/embedded/rtos/syswriter_noos.go
+new file mode 100644
+index 0000000000..1ddd5a921f
+--- /dev/null
++++ b/src/embedded/rtos/syswriter_noos.go
+@@ -0,0 +1,22 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package rtos
++
++import (
++	"sync"
++	_ "unsafe"
++)
++
++var setsyswritermx sync.Mutex
++
++func setSysWriter(w func(fd int, p []byte) int) error {
++	setsyswritermx.Lock()
++	runtime_setsyswriter(w)
++	setsyswritermx.Unlock()
++	return nil
++}
++
++//go:linkname runtime_setsyswriter runtime.setsyswriter
++func runtime_setsyswriter(w func(fd int, p []byte) int)
+diff --git a/src/embedded/rtos/syswriter_x.go b/src/embedded/rtos/syswriter_x.go
+new file mode 100644
+index 0000000000..7f6a6ff454
+--- /dev/null
++++ b/src/embedded/rtos/syswriter_x.go
+@@ -0,0 +1,11 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++// +build !noos
++
++package rtos
++
++func setSysWriter(w func(fd int, p []byte) int) error {
 +	return ErrNotSuppoted
 +}
 diff --git a/src/embedded/rtos/utils.go b/src/embedded/rtos/utils.go
@@ -53061,32 +53123,28 @@ index 0000000000..e99cfd1f38
 \ No newline at end of file
 diff --git a/src/internal/cpu/riscv/clint/periph_riscv64.go b/src/internal/cpu/riscv/clint/periph_riscv64.go
 new file mode 100644
-index 0000000000..78f3842fc7
+index 0000000000..0ab4d550e9
 --- /dev/null
 +++ b/src/internal/cpu/riscv/clint/periph_riscv64.go
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,11 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
 +
-+// +build riscv64
-+
 +// Instances:
 +//  CLINT  0x2000000  -  -  Core Local Interrupter
 +// Registers:
-+//  0x000  32  MSIP[2]      Hart Software Interrupt Register
-+//  0x4000 64  MTIMECMP[2]  Hart Time Comparator Register
-+//  0xBFF8 64  MTIME        Timer Register
++//  0x0000 32  MSIP[99]      Hart Software Interrupt Register
++//  0x4000 64  MTIMECMP[99]  Hart Time Comparator Register
++//  0xBFF8 64  MTIME         Timer Register
 +package clint
 diff --git a/src/internal/cpu/riscv/clint/xperiph_riscv64.go b/src/internal/cpu/riscv/clint/xperiph_riscv64.go
 new file mode 100644
-index 0000000000..ccb579f54a
+index 0000000000..4f874111ec
 --- /dev/null
 +++ b/src/internal/cpu/riscv/clint/xperiph_riscv64.go
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,70 @@
 +// DO NOT EDIT THIS FILE. GENERATED BY xgen.
-+
-+// +build riscv64
 +
 +package clint
 +
@@ -53156,6 +53214,53 @@ index 0000000000..ccb579f54a
 +
 +func (rm RMMTIME) Load() MTIME   { return MTIME(rm.UM64.Load()) }
 +func (rm RMMTIME) Store(b MTIME) { rm.UM64.Store(uint64(b)) }
+diff --git a/src/internal/cpu/riscv/plic/doc.go b/src/internal/cpu/riscv/plic/doc.go
+new file mode 100644
+index 0000000000..249738e3a6
+--- /dev/null
++++ b/src/internal/cpu/riscv/plic/doc.go
+@@ -0,0 +1,6 @@
++// Copyright 2020 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++// Package plic provides access to the registers of the Platform-Level Interrupt Controller.
++package plic
+diff --git a/src/internal/cpu/riscv/plic/periph_riscv64.go b/src/internal/cpu/riscv/plic/periph_riscv64.go
+new file mode 100644
+index 0000000000..a7fdc40661
+--- /dev/null
++++ b/src/internal/cpu/riscv/plic/periph_riscv64.go
+@@ -0,0 +1,29 @@
++// Copyright 2019 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++package plic
++
++import (
++	"embedded/mmio"
++	"unsafe"
++)
++
++type Periph struct {
++	PRIO [1024]mmio.U32 // interrupt source priorities
++	PEND [32]mmio.U32   // interrupt pending bits
++	_    [992]uint32
++	EN   [15872][32]mmio.U32 // interrupt enable bits
++	_    [14336]uint32
++	TC   [15872]struct {
++		THR mmio.U32 // priority threshold
++		CC  mmio.U32 // claim/complete
++		_   [1022]uint32
++	}
++}
++
++func PLIC() *Periph {
++	// BUG: The 0x0C000000 address is valid for Qemu Virt, Kendryte K210, some
++	// SiFive cores but generally it's implementation specific.
++	return (*Periph)(unsafe.Pointer(uintptr(0x0C000000)))
++}
 diff --git a/src/internal/poll/fd_noos.go b/src/internal/poll/fd_noos.go
 new file mode 100644
 index 0000000000..059021af14
@@ -53990,10 +54095,10 @@ index 0000000000..16b4b45d97
 +	RET
 diff --git a/src/runtime/asm_riscv64.h b/src/runtime/asm_riscv64.h
 new file mode 100644
-index 0000000000..58ca562818
+index 0000000000..3bdd02db29
 --- /dev/null
 +++ b/src/runtime/asm_riscv64.h
-@@ -0,0 +1,174 @@
+@@ -0,0 +1,177 @@
 +#define LR  RA // link register
 +#define TMP T6 // REG_TMP
 +
@@ -54032,10 +54137,13 @@ index 0000000000..58ca562818
 +
 +// core peripherals
 +
-+#define CLINT_BASE 0x2000000 // true for QEMU, K210 but not standardized
++#define CLINT_BASE 0x2000000 // true for Qemu Virt, K210, some SiFive cores
 +#define msip     (CLINT_BASE + 0x0000)
 +#define mtimecmp (CLINT_BASE + 0x4000)
 +#define mtime    (CLINT_BASE + 0xBFF8)
++
++#define PLIC_BASE 0x0C000000 // true for Qemu Virt, K210, some SiFive cores
++#define PLIC_EN   (PLIC_BASE + 0x2000)
 +
 +// instructinos not implemented by assembly
 +
@@ -60130,17 +60238,19 @@ index 0000000000..2970ad52e1
 +}
 diff --git a/src/runtime/os_noos.go b/src/runtime/os_noos.go
 new file mode 100644
-index 0000000000..596b30ab67
+index 0000000000..4154f6968f
 --- /dev/null
 +++ b/src/runtime/os_noos.go
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,134 @@
 +// Copyright 2018 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
 +
 +package runtime
 +
-+import "unsafe"
++import (
++	"unsafe"
++)
 +
 +const (
 +	_NSIG             = 0
@@ -60203,6 +60313,16 @@ index 0000000000..596b30ab67
 +}
 +
 +//go:nosplit
++func setsyswriter(w func(fd int, p []byte) int) {
++	if w != nil {
++		thetasker.newwrite = w
++	} else {
++		thetasker.newwrite = defaultWrite
++	}
++	setsyswriter1()
++}
++
++//go:nosplit
 +func usleep(usec uint32) {
 +	nanosleep(int64(usec) * 1000)
 +}
@@ -60221,10 +60341,17 @@ index 0000000000..596b30ab67
 +
 +//go:nosplit
 +func isr() bool {
-+	return getg() == &thetasker.allcpu[cpuid()].gh
++	allcpu := thetasker.allcpu
++	for i := 0; i < len(allcpu); i++ {
++		if getg() == &allcpu[i].gh {
++			return true
++		}
++	}
++	return false
 +}
 +
 +func setsystim1()
++func setsyswriter1()
 +func newosproc(mp *m)
 +func exit(code int32)
 +func osyield()
@@ -60566,10 +60693,10 @@ index 0000000000..6cdeb88294
 +
 diff --git a/src/runtime/rt0_noos_riscv64.s b/src/runtime/rt0_noos_riscv64.s
 new file mode 100644
-index 0000000000..61694a62c0
+index 0000000000..485b7fc774
 --- /dev/null
 +++ b/src/runtime/rt0_noos_riscv64.s
-@@ -0,0 +1,291 @@
+@@ -0,0 +1,308 @@
 +// Copyright 2020 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -60594,7 +60721,7 @@ index 0000000000..61694a62c0
 +#define handlerStackSize 4*1024 // size of stack usesd by trap handlers
 +#define persistAllocMin 64*1024
 +
-+#define intEnabled (MTI+MSI) // TODO: MEI
++#define intEnabled (MTI+MSI+MEI)
 +
 +DATA runtime·waitInit+0(SB)/4, $-1
 +GLOBL runtime·waitInit(SB), NOPTR, $4
@@ -60801,7 +60928,24 @@ index 0000000000..61694a62c0
 +	CALL  runtime·taskerinit(SB)
 +	CALL  runtime·schedinit(SB)
 +
-+	// run other harts (TODO: setup PLIC, to allow all harts to enable also MEI)
++	// disable interrupts in PLIC
++	// BUG: tries to disable all possible interrupts in all possible contexts,
++	// it accesses reseved address space, can raise Store Access Fault exception
++	MOV  $PLIC_EN, A0
++	ADD  $(15872*32*4), A0, A1
++plicLoop:
++	MOVW  ZERO, 0(A0)
++	MOVW  ZERO, 4(A0)
++	MOVW  ZERO, 8(A0)
++	MOVW  ZERO, 12(A0)
++	MOVW  ZERO, 16(A0)
++	MOVW  ZERO, 20(A0)
++	MOVW  ZERO, 24(A0)
++	MOVW  ZERO, 28(A0)
++	ADD   $32, A0
++	BNE   A0, A1, plicLoop
++
++	// run other harts
 +	MOV   $·waitInit(SB), A0
 +	MOVW  ZERO, (A0)
 +
@@ -62224,10 +62368,10 @@ index 0000000000..c9b247743c
 +	RET
 diff --git a/src/runtime/sys_noos_riscv64.s b/src/runtime/sys_noos_riscv64.s
 new file mode 100644
-index 0000000000..972a0413ee
+index 0000000000..dec747acff
 --- /dev/null
 +++ b/src/runtime/sys_noos_riscv64.s
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,151 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -62249,6 +62393,7 @@ index 0000000000..972a0413ee
 +
 +// syscalls disallowed for low priority interrupt handlers
 +DATA runtime·syscalls+(SYS_setsystim1*8)(SB)/8, $·syssetsystim1(SB)
++DATA runtime·syscalls+(SYS_setsyswriter1*8)(SB)/8, $·syssetsyswriter1(SB)
 +DATA runtime·syscalls+(SYS_newosproc*8)(SB)/8, $·sysnewosproc(SB)
 +DATA runtime·syscalls+(SYS_exitThread*8)(SB)/8, $·sysexitThread(SB)
 +DATA runtime·syscalls+(SYS_futexsleep*8)(SB)/8, $·sysfutexsleep(SB)
@@ -62301,16 +62446,24 @@ index 0000000000..972a0413ee
 +	RET
 +
 +// func write1(fd uintptr, p unsafe.Pointer, n int32) int32
-+TEXT ·write1(SB),NOSPLIT|NOFRAME,$0-28
++TEXT ·write1(SB),NOSPLIT|NOFRAME,$0-32
 +	MOV  $SYS_write, A3
 +	MOV  $(24+8), A4
-+	MOV  $4, A5  // BUG: if not n*8 we can't use duffcopy!
-+	EBREAK
-+	JMP  -1(PC)
++	MOV  $8, A5
++	ECALL
++	RET
 +
 +// func setsystim1()
 +TEXT ·setsystim1(SB),NOSPLIT|NOFRAME,$0-0
 +	MOV  $SYS_setsystim1, A3
++	MOV  $(0+8), A4
++	MOV  $0, A5
++	ECALL
++	RET
++
++// func setsyswriter1()
++TEXT ·setsyswriter1(SB),NOSPLIT|NOFRAME,$0-0
++	MOV  $SYS_setsyswriter1, A3
 +	MOV  $(0+8), A4
 +	MOV  $0, A5
 +	ECALL
@@ -62372,10 +62525,10 @@ index 0000000000..972a0413ee
 +	JMP  -1(PC)
 diff --git a/src/runtime/sys_noos_thumb.s b/src/runtime/sys_noos_thumb.s
 new file mode 100644
-index 0000000000..d644ab82f1
+index 0000000000..ab0d0b6c07
 --- /dev/null
 +++ b/src/runtime/sys_noos_thumb.s
-@@ -0,0 +1,148 @@
+@@ -0,0 +1,158 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -62397,6 +62550,7 @@ index 0000000000..d644ab82f1
 +
 +// syscalls disallowed for low priority interrupt handlers
 +DATA runtime·syscalls+(SYS_setsystim1*4)(SB)/4, $·syssetsystim1(SB)
++DATA runtime·syscalls+(SYS_setsyswriter1*4)(SB)/4, $·syssetsyswriter1(SB)
 +DATA runtime·syscalls+(SYS_newosproc*4)(SB)/4, $·sysnewosproc(SB)
 +DATA runtime·syscalls+(SYS_exitThread*4)(SB)/4, $·sysexitThread(SB)
 +DATA runtime·syscalls+(SYS_futexsleep*4)(SB)/4, $·sysfutexsleep(SB)
@@ -62457,6 +62611,15 @@ index 0000000000..d644ab82f1
 +// func setsystim1()
 +TEXT ·setsystim1(SB),NOSPLIT|NOFRAME,$0-0
 +	MOVW  $SYS_setsystim1, R4
++	MOVW  $(0+4), R5
++	MOVW  $0, R6
++	SWI
++	RET
++
++
++// func setsyswriter1()
++TEXT ·setsyswriter1(SB),NOSPLIT|NOFRAME,$0-0
++	MOVW  $SYS_setsyswriter1, R4
 +	MOVW  $(0+4), R5
 +	MOVW  $0, R6
 +	SWI
@@ -62526,10 +62689,10 @@ index 0000000000..d644ab82f1
 +	RET
 diff --git a/src/runtime/syscall_noos.h b/src/runtime/syscall_noos.h
 new file mode 100644
-index 0000000000..9ad7ba93c9
+index 0000000000..a8fb827805
 --- /dev/null
 +++ b/src/runtime/syscall_noos.h
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,28 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -62539,30 +62702,31 @@ index 0000000000..9ad7ba93c9
 +// Other syscalls, that can't run concurently with the scheduler, are available
 +// only to threads.
 +
-+#define SYS_nanotime      0
-+#define SYS_walltime      1
-+#define SYS_setwalltime   2
-+#define SYS_irqctl        3
-+#define SYS_setprivlevel  4
-+#define SYS_write         5
++#define SYS_nanotime       0
++#define SYS_walltime       1
++#define SYS_setwalltime    2
++#define SYS_irqctl         3
++#define SYS_setprivlevel   4
++#define SYS_write          5
 +
-+#define SYS_LAST_FAST     5
++#define SYS_LAST_FAST      5
 +
-+#define SYS_setsystim1    6
-+#define SYS_newosproc     7
-+#define SYS_exitThread    8
-+#define SYS_futexsleep    9
-+#define SYS_futexwakeup  10
-+#define SYS_osyield      11
-+#define SYS_nanosleep    12
++#define SYS_setsystim1     6
++#define SYS_setsyswriter1  7
++#define SYS_newosproc      8
++#define SYS_exitThread     9
++#define SYS_futexsleep    10
++#define SYS_futexwakeup   11
++#define SYS_osyield       12
++#define SYS_nanosleep     13
 +
-+#define SYS_NUM          13
++#define SYS_NUM           14
 diff --git a/src/runtime/tasker_noos.go b/src/runtime/tasker_noos.go
 new file mode 100644
-index 0000000000..1c34d5796b
+index 0000000000..9c0e5a9a74
 --- /dev/null
 +++ b/src/runtime/tasker_noos.go
-@@ -0,0 +1,546 @@
+@@ -0,0 +1,572 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -62648,7 +62812,11 @@ index 0000000000..1c34d5796b
 +func dummyNanotime() int64        { return 1 }
 +func dummySetalarm(ns int64) bool { return false }
 +
-+var thetasker = tasker{nanotime: dummyNanotime, setalarm: dummySetalarm}
++var thetasker = tasker{
++	nanotime: dummyNanotime,
++	setalarm: dummySetalarm,
++	write:    defaultWrite,
++}
 +
 +const fbnum = 4 // number of futex hash table buckets, must be power of two
 +
@@ -62681,9 +62849,12 @@ index 0000000000..1c34d5796b
 +
 +	nanotime func() int64
 +	setalarm func(ns int64) bool
++	write    func(fd int, p []byte) int
++	writemx  cpumtx
 +
-+	newnanotime func() int64        // see embedded/rtos.SetSystemTimer
-+	newsetalarm func(ns int64) bool // see embedded/rtos.SetSystemTimer
++	newnanotime func() int64               // see embedded/rtos.SetSystemTimer
++	newsetalarm func(ns int64) bool        // see embedded/rtos.SetSystemTimer
++	newwrite    func(fd int, p []byte) int // see embedded/rtos.SetSystemWriter
 +}
 +
 +//go:nosplit
@@ -62958,11 +63129,20 @@ index 0000000000..1c34d5796b
 +//go:nosplit
 +func syssetsystim1() {
 +	t := curcpu().t
-+	// TODO(md): this code doesn't look good, requires some thought
 +	const n = unsafe.Sizeof(t.nanotime) / unsafe.Sizeof(uintptr(0))
++	// BUG: non-atomic writes
 +	*(*[n]uintptr)(unsafe.Pointer(&t.nanotime)) = *(*[n]uintptr)(unsafe.Pointer(&t.newnanotime))
 +	*(*[n]uintptr)(unsafe.Pointer(&t.setalarm)) = *(*[n]uintptr)(unsafe.Pointer(&t.newsetalarm))
 +	curcpuSchedule() // ensure scheduler uses new timer: BUG(md): other CPUs?
++}
++
++//go:nowritebarrierrec
++//go:nosplit
++func syssetsyswriter1() {
++	t := curcpu().t
++	const n = unsafe.Sizeof(t.write) / unsafe.Sizeof(uintptr(0))
++	// BUG: non-atomic write
++	*(*[n]uintptr)(unsafe.Pointer(&t.write)) = *(*[n]uintptr)(unsafe.Pointer(&t.newwrite))
 +}
 +
 +//go:nowritebarrierrec
@@ -63096,6 +63276,16 @@ index 0000000000..1c34d5796b
 +	t.timestart.mx.unlock()
 +}
 +
++//go:nowritebarrierrec
++//go:nosplit
++func syswrite(fd uintptr, p unsafe.Pointer, n int32) int32 {
++	t := curcpu().t
++	t.writemx.lock()
++	n = int32(t.write(int(fd), (*[1 << 30]byte)(p)[:n]))
++	t.writemx.unlock()
++	return n
++}
++
 +// m fields used
 +
 +//go:nosplit
@@ -63111,10 +63301,10 @@ index 0000000000..1c34d5796b
 +func msetwt(m *m, wt *msl) { m.caughtsig = guintptr(unsafe.Pointer(wt)) }
 diff --git a/src/runtime/tasker_noos_riscv64.go b/src/runtime/tasker_noos_riscv64.go
 new file mode 100644
-index 0000000000..01ed2ebe36
+index 0000000000..a5ee4e78fe
 --- /dev/null
 +++ b/src/runtime/tasker_noos_riscv64.go
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,80 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -63174,6 +63364,10 @@ index 0000000000..01ed2ebe36
 +	curcpu().exe.set(getg().m)
 +}
 +
++//go:nowritebarrierrec
++//go:nosplit
++func defaultWrite(fd int, p []byte) int { return len(p) }
++
 +const (
 +	// m.tls fields
 +	mstatus = 4 // privilege level (MPP>>7), thrSmallCtx
@@ -63190,11 +63384,10 @@ index 0000000000..01ed2ebe36
 +
 +func syssetprivlevel(newlevel int) (oldlevel, errno int)
 +
-+func sysirqctl(irq, ctl int) (enabled, prio, errno int)    { breakpoint(); return }
-+func syswrite(fd uintptr, p unsafe.Pointer, n int32) int32 { breakpoint(); return -1 }
++func sysirqctl(irq, ctl int) (enabled, prio, errno int) { breakpoint(); return }
 diff --git a/src/runtime/tasker_noos_riscv64.s b/src/runtime/tasker_noos_riscv64.s
 new file mode 100644
-index 0000000000..54ea097452
+index 0000000000..60810c9dbc
 --- /dev/null
 +++ b/src/runtime/tasker_noos_riscv64.s
 @@ -0,0 +1,530 @@
@@ -63247,7 +63440,7 @@ index 0000000000..54ea097452
 +GLOBL runtime·exceptionHandlers(SB), RODATA, $exceptionHandlersSize
 +
 +
-+#define sysMaxArgs (24+8)
++#define sysMaxArgs (32+8)
 +#define envCallFrameSize (sysMaxArgs+3*8)
 +
 +
@@ -63730,10 +63923,10 @@ index 0000000000..54ea097452
 +	RET
 diff --git a/src/runtime/tasker_noos_thumb.go b/src/runtime/tasker_noos_thumb.go
 new file mode 100644
-index 0000000000..0b43ae9d70
+index 0000000000..0b3abfa0b2
 --- /dev/null
 +++ b/src/runtime/tasker_noos_thumb.go
-@@ -0,0 +1,284 @@
+@@ -0,0 +1,281 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -63885,38 +64078,35 @@ index 0000000000..0b43ae9d70
 +	mmio.MB()
 +}
 +
-+// syscall handlers (architecture specific code)
-+
 +//go:nowritebarrierrec
 +//go:nosplit
-+func syswrite(fd uintptr, p unsafe.Pointer, n int32) int32 {
++func defaultWrite(fd int, p []byte) int {
 +	ITM := itm.ITM()
 +	itmena := ITM.ITMENA()
 +	port := &ITM.STIM[fd]
 +	portena := mmio.UM32{&ITM.TER[fd>>5].U32, 1 << (fd & 31)}
-+	s := (*[1 << 30]byte)(p)
-+	for i := 0; i < int(n); {
++	for i := 0; i < len(p); {
 +		for port.LoadBit(0) == 0 {
 +			if portena.Load() == 0 || itmena.Load() == 0 {
-+				return n // do not block on disabled port/ITM
++				return len(p) // do not block on disabled port/ITM
 +			}
 +		}
-+		switch m := int(n) - i; {
++		switch m := len(p) - i; {
 +		case m >= 4:
-+			port.U32.Store(uint32(s[i]) + uint32(s[i+1])<<8 |
-+				uint32(s[i+2])<<16 | uint32(s[i+3])<<24)
++			port.U32.Store(uint32(p[i]) + uint32(p[i+1])<<8 |
++				uint32(p[i+2])<<16 | uint32(p[i+3])<<24)
 +			i += 4
 +		case m >= 2:
-+			p := (*mmio.U16)(unsafe.Pointer(&port.U32))
-+			p.Store(uint16(s[i]) | uint16(s[i+1])<<8)
++			port16 := (*mmio.U16)(unsafe.Pointer(&port.U32))
++			port16.Store(uint16(p[i]) | uint16(p[i+1])<<8)
 +			i += 2
 +		default:
-+			p := (*mmio.U8)(unsafe.Pointer(&port.U32))
-+			p.Store(s[i])
++			port8 := (*mmio.U8)(unsafe.Pointer(&port.U32))
++			port8.Store(p[i])
 +			i++
 +		}
 +	}
-+	return n
++	return len(p)
 +}
 +
 +// syscalls not used by runtime
