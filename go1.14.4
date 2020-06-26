@@ -1,9 +1,9 @@
 diff --git a/api/go1embedded.txt b/api/go1embedded.txt
 new file mode 100644
-index 0000000000..af5459ae39
+index 0000000000..8855bccf79
 --- /dev/null
 +++ b/api/go1embedded.txt
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,115 @@
 +pkg embedded/mmio, func MB()
 +pkg embedded/mmio, method (*U16) Addr() uintptr
 +pkg embedded/mmio, method (*U16) LoadBit(int) int
@@ -100,21 +100,24 @@ index 0000000000..af5459ae39
 +pkg embedded/rtos, func Nanotime() time.Duration
 +pkg embedded/rtos, func SetPrivLevel(int) (int, error)
 +pkg embedded/rtos, func SetSystemTimer(func() int64, func(int64) bool) error
++pkg embedded/rtos, func SetSystemWriter(func(int, []uint8) int) error
 +pkg embedded/rtos, method (*Error) Error() string
 +pkg embedded/rtos, method (*Note) Clear()
 +pkg embedded/rtos, method (*Note) Sleep(time.Duration) bool
 +pkg embedded/rtos, method (*Note) Wakeup()
-+pkg embedded/rtos, method (IRQ) Disable(int) error
-+pkg embedded/rtos, method (IRQ) Enable(int, int) error
-+pkg embedded/rtos, method (IRQ) Status(int) (bool, int, error)
++pkg embedded/rtos, method (IRQ) Disable(IntCtx) error
++pkg embedded/rtos, method (IRQ) Enable(int, IntCtx) error
++pkg embedded/rtos, method (IRQ) Status(IntCtx) (bool, int, error)
 +pkg embedded/rtos, type Error struct
 +pkg embedded/rtos, type IRQ int
++pkg embedded/rtos, type IntCtx int
 +pkg embedded/rtos, type Note struct
 +pkg embedded/rtos, var ErrBadIntNumber *Error
 +pkg embedded/rtos, var ErrBadIntPrio *Error
 +pkg embedded/rtos, var ErrBadPrivLevel *Error
 +pkg embedded/rtos, var ErrInsufPrivLevel *Error
 +pkg embedded/rtos, var ErrNotSuppoted *Error
++pkg embedded/rtos, var ErrBadIntCtx *Error
 +pkg embedded/rtos, var ErrUknown *Error
 diff --git a/src/cmd/asm/internal/arch/arch.go b/src/cmd/asm/internal/arch/arch.go
 index f090d12bed..886a5dbe3d 100644
@@ -36187,7 +36190,7 @@ index 7ca01c8c25..3556a5ef34 100644
  			log.Fatalf("compression failed: %s", err)
  		}
 diff --git a/src/cmd/link/internal/ld/deadcode.go b/src/cmd/link/internal/ld/deadcode.go
-index 6d96ae50d7..15cdc93d8e 100644
+index 6d96ae50d7..29b1880519 100644
 --- a/src/cmd/link/internal/ld/deadcode.go
 +++ b/src/cmd/link/internal/ld/deadcode.go
 @@ -9,6 +9,7 @@ import (
@@ -36216,7 +36219,7 @@ index 6d96ae50d7..15cdc93d8e 100644
  	d.init()
  	d.flood()
  
-@@ -258,11 +259,43 @@ func (d *deadcodepass) markMethod(m methodref) {
+@@ -258,11 +259,48 @@ func (d *deadcodepass) markMethod(m methodref) {
  	}
  }
  
@@ -36237,7 +36240,7 @@ index 6d96ae50d7..15cdc93d8e 100644
 +	"SysTick_Handler",
 +}
 +
-+func CortexmHandler(irqn int) string {
++func InterruptHandler(irqn int) string {
 +	if irqn < 0 {
 +		return cortexmSystemHandlers[irqn+14]
 +	}
@@ -36251,17 +36254,22 @@ index 6d96ae50d7..15cdc93d8e 100644
  	var names []string
  
 +	if d.ctxt.HeadType == objabi.Hnoos {
-+		if d.ctxt.Arch.Family == sys.Thumb {
-+			// mark exception handlers
-+			for irqn := -14; irqn < 480; irqn++ {
-+				names = append(names, CortexmHandler(irqn))
-+			}
++		// mark interrupt handlers
++		var first, last int
++		switch d.ctxt.Arch.Family {
++		case sys.Thumb:
++			first, last = -14, 479
++		case sys.RISCV64:
++			first, last = 1, 1023
++		}
++		for i := first; i <= last; i++ {
++			names = append(names, InterruptHandler(i))
 +		}
 +	}
  	if d.ctxt.BuildMode == BuildModeShared {
  		// Mark all symbols defined in this library as reachable when
  		// building a shared library.
-@@ -281,12 +314,12 @@ func (d *deadcodepass) init() {
+@@ -281,12 +319,12 @@ func (d *deadcodepass) init() {
  			// The external linker refers main symbol directly.
  			if d.ctxt.LinkMode == LinkExternal && (d.ctxt.BuildMode == BuildModeExe || d.ctxt.BuildMode == BuildModePIE) {
  				if d.ctxt.HeadType == objabi.Hwindows && d.ctxt.Arch.Family == sys.I386 {
@@ -36655,35 +36663,81 @@ index 8814bad4ae..21641e534f 100644
  		f.xahdr.Osnentry = f.getXCOFFscnum(entry.Sect)
  		toc := ctxt.Syms.ROLookup("TOC", 0)
 diff --git a/src/cmd/link/internal/riscv64/asm.go b/src/cmd/link/internal/riscv64/asm.go
-index b0897288fc..d29f44b82d 100644
+index b0897288fc..6dd703b282 100644
 --- a/src/cmd/link/internal/riscv64/asm.go
 +++ b/src/cmd/link/internal/riscv64/asm.go
-@@ -15,6 +15,24 @@ import (
+@@ -14,7 +14,70 @@ import (
+ 	"log"
  )
  
- func gentext(ctxt *ld.Link) {
-+	if ctxt.HeadType == objabi.Hnoos {
-+		// move entry symbol on the beggining of text segment
-+		entry := ctxt.Syms.ROLookup(*ld.FlagEntrySymbol, sym.SymVerABI0)
-+		if entry == nil || entry.FuncInfo == nil {
-+			entry = ctxt.Syms.ROLookup(*ld.FlagEntrySymbol, sym.SymVerABIInternal)
-+			if entry == nil || entry.FuncInfo == nil {
-+				ld.Errorf(nil, "cannot find entry function: %s", *ld.FlagEntrySymbol)
-+			}
-+		}
-+		for i, s := range ctxt.Textp {
-+			if s == entry {
-+				copy(ctxt.Textp[1:], ctxt.Textp[:i])
-+				ctxt.Textp[0] = s
-+				return
-+			}
-+		}
-+		ld.Errorf(entry, "cannot find symbol in ctxt.Textp")
++func lookupFuncSym(syms *sym.Symbols, name string) *sym.Symbol {
++	if s := syms.ROLookup(name, sym.SymVerABI0); s != nil && s.FuncInfo != nil {
++		return s
 +	}
++	if s := syms.ROLookup(name, sym.SymVerABIInternal); s != nil && s.FuncInfo != nil {
++		return s
++	}
++	return nil
++}
++
+ func gentext(ctxt *ld.Link) {
++	if ctxt.HeadType != objabi.Hnoos {
++		return
++	}
++	vectors := ctxt.Syms.Lookup("runtime.vectors", 0)
++	vectors.Type = sym.STEXT
++	vectors.Attr |= sym.AttrReachable
++	vectors.Align = 8
++
++	unhandledInterrupt := ctxt.Syms.Lookup("runtime.unhandledExternalInterrupt", 0)
++	if unhandledInterrupt == nil {
++		ld.Errorf(nil, "runtime.unhandledExternalInterrupt not defined")
++	}
++
++	// search for user defined ISRs: //go:linkname functionName IRQ%d_Handler
++	var irqHandlers [1024]*sym.Symbol // BUG: 1024 is PLIC specific
++	irqNum := 0
++	for i := 1; i < len(irqHandlers); i++ {
++		s := lookupFuncSym(ctxt.Syms, ld.InterruptHandler(i))
++		if s == nil {
++			irqHandlers[i] = unhandledInterrupt
++		} else {
++			irqHandlers[i] = s
++			irqNum = i + 1
++		}
++	}
++	vectors.AddUint64(ctxt.Arch, uint64(irqNum))
++	for _, s := range irqHandlers[1:irqNum] {
++		s.Attr |= sym.AttrReachable
++		rel := vectors.AddRel()
++		rel.Off = int32(len(vectors.P))
++		rel.Siz = 8
++		rel.Type = objabi.R_ADDR
++		rel.Sym = s
++		vectors.AddUint64(ctxt.Arch, 0)
++	}
++	ctxt.Textp = append(ctxt.Textp, vectors)
++
++	// move entry symbol on the beggining of text segment
++	entry := ctxt.Syms.ROLookup(*ld.FlagEntrySymbol, sym.SymVerABI0)
++	if entry == nil || entry.FuncInfo == nil {
++		entry = ctxt.Syms.ROLookup(*ld.FlagEntrySymbol, sym.SymVerABIInternal)
++		if entry == nil || entry.FuncInfo == nil {
++			ld.Errorf(nil, "cannot find entry function: %s", *ld.FlagEntrySymbol)
++		}
++	}
++	for i, s := range ctxt.Textp {
++		if s == entry {
++			copy(ctxt.Textp[1:], ctxt.Textp[:i])
++			ctxt.Textp[0] = s
++			return
++		}
++	}
++	ld.Errorf(entry, "cannot find symbol in ctxt.Textp")
  }
  
  func adddynrela(ctxt *ld.Link, rel *sym.Symbol, s *sym.Symbol, r *sym.Reloc) {
-@@ -150,7 +168,7 @@ func asmb2(ctxt *ld.Link) {
+@@ -150,7 +213,7 @@ func asmb2(ctxt *ld.Link) {
  
  	ctxt.Out.SeekSet(0)
  	switch ctxt.HeadType {
@@ -36735,7 +36789,7 @@ index d5255bf142..04d07acc51 100644
  	Elfsect interface{} // an *ld.ElfShdr
 diff --git a/src/cmd/link/internal/thumb/asm.go b/src/cmd/link/internal/thumb/asm.go
 new file mode 100644
-index 0000000000..c98d4a3bc4
+index 0000000000..9b46122c22
 --- /dev/null
 +++ b/src/cmd/link/internal/thumb/asm.go
 @@ -0,0 +1,395 @@
@@ -36821,14 +36875,14 @@ index 0000000000..c98d4a3bc4
 +
 +	// system exception handlers
 +	for irqn := -14; irqn < 0; irqn++ {
-+		vectorsAdd(ld.CortexmHandler(irqn))
++		vectorsAdd(ld.InterruptHandler(irqn))
 +	}
 +
 +	// search for user defined ISRs: //go:linkname functionName IRQ%d_Handler
 +	var irqHandlers [480]*sym.Symbol
 +	irqNum := 0
 +	for i := range irqHandlers {
-+		s := lookupFuncSym(ctxt.Syms, ld.CortexmHandler(i))
++		s := lookupFuncSym(ctxt.Syms, ld.InterruptHandler(i))
 +		if s != nil {
 +			irqHandlers[i] = s
 +			irqNum = i + 1
@@ -49012,10 +49066,10 @@ index 0000000000..4433a7fdab
 +	RET
 diff --git a/src/embedded/rtos/errors.go b/src/embedded/rtos/errors.go
 new file mode 100644
-index 0000000000..a5681609f1
+index 0000000000..da45f6899a
 --- /dev/null
 +++ b/src/embedded/rtos/errors.go
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,19 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49033,13 +49087,14 @@ index 0000000000..a5681609f1
 +	ErrInsufPrivLevel = &Error{"rtos: insufficient privilege level"}
 +	ErrBadIntNumber   = &Error{"rtos: bad interrupt number"}
 +	ErrBadIntPrio     = &Error{"rtos: bad interrupt priority"}
++	ErrBadIntCtx      = &Error{"rtos: bad interrupt context"}
 +)
 diff --git a/src/embedded/rtos/errors_noos.go b/src/embedded/rtos/errors_noos.go
 new file mode 100644
-index 0000000000..211958dc58
+index 0000000000..45b39532be
 --- /dev/null
 +++ b/src/embedded/rtos/errors_noos.go
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,25 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49053,6 +49108,7 @@ index 0000000000..211958dc58
 +	3: ErrInsufPrivLevel,
 +	4: ErrBadIntNumber,
 +	5: ErrBadIntPrio,
++	6: ErrBadIntCtx,
 +}
 +
 +func errnoError(errno int) error {
@@ -49066,10 +49122,10 @@ index 0000000000..211958dc58
 +}
 diff --git a/src/embedded/rtos/irq.go b/src/embedded/rtos/irq.go
 new file mode 100644
-index 0000000000..57568ec3ae
+index 0000000000..ac8077b470
 --- /dev/null
 +++ b/src/embedded/rtos/irq.go
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,66 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49107,38 +49163,41 @@ index 0000000000..57568ec3ae
 +	IntPrioCurrent = intPrioCurrent
 +)
 +
-+// IRQ represents an user accessible interrupt. It provides interface to basic
-+// operations such as enabling/disabling the interrupt requests and setting
-+// interrupt priorities. There can be other (system) interrupts not exposed by
-+// this interface.
++// IRQ represents a source of interrupts. It provides interface to basic
++// operations such as enabling/disabling handling interrupts from this source
++// and setting its priority. There can be other (system) interrupt/exception
++// sources not exposed by this interface.
 +type IRQ int
++
++// IntCtx represents an interrupt context. The context has implementation
++// specific meaning, can correspond to CPU, core, hardware thread, privilege
++// level or any combination thereof.
++type IntCtx intCtx
 +
 +// Enable sets the priority of the interrupt and enables interrupt requests in
 +// the context specified by ctxid. The context has implementation specific
 +// meaning, can correspond to CPU, core, hardware thread, privilege level or any
-+// combination thereof. The special ctxid=-1 allows the Enable to select one or
-+// more contexts automaticaly.
-+func (irq IRQ) Enable(prio, ctxid int) error {
-+	return irqEnable(irq, prio)
++// combination thereof.
++func (irq IRQ) Enable(prio int, ctx IntCtx) error {
++	return irqEnable(irq, prio, ctx)
 +}
 +
-+// Disable disables interrupt requests int the context specified by ctxid. The
-+// special ctxid=-1 disables irq in all contexts.
-+func (irq IRQ) Disable(ctxid int) error {
-+	return irqDisable(irq)
++// Disable disables interrupt requests int the context specified by ctxid.
++func (irq IRQ) Disable(ctx IntCtx) error {
++	return irqDisable(irq, ctx)
 +}
 +
-+// Status reports whether the irq is enabled in context ctxi and returns its
++// Status reports whether the irq is enabled in context ctxid and returns its
 +// priority.
-+func (irq IRQ) Status(ctxid int) (enabled bool, prio int, err error) {
-+	return irqStatus(irq)
++func (irq IRQ) Status(ctx IntCtx) (enabled bool, prio int, err error) {
++	return irqStatus(irq, ctx)
 +}
 diff --git a/src/embedded/rtos/irq_noos.go b/src/embedded/rtos/irq_noos.go
 new file mode 100644
-index 0000000000..45e34f0508
+index 0000000000..7f35841cb9
 --- /dev/null
 +++ b/src/embedded/rtos/irq_noos.go
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,30 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49147,29 +49206,31 @@ index 0000000000..45e34f0508
 +
 +import _ "unsafe"
 +
-+func irqEnable(irq IRQ, prio int) error {
++type intCtx int
++
++func irqEnable(irq IRQ, prio int, ctx IntCtx) error {
 +	if uint(prio+1) > intPrioHighest+1 {
 +		return ErrBadIntPrio
 +	}
-+	_, _, errno := runtime_irqctl(int(irq), prio)
++	_, _, errno := runtime_irqctl(int(irq), prio, int(ctx))
 +	return errnoError(errno)
 +}
 +
-+func irqDisable(irq IRQ) error {
-+	_, _, errno := runtime_irqctl(int(irq), -2)
++func irqDisable(irq IRQ, ctx IntCtx) error {
++	_, _, errno := runtime_irqctl(int(irq), -2, int(ctx))
 +	return errnoError(errno)
 +}
 +
-+func irqStatus(irq IRQ) (enabled bool, prio int, err error) {
-+	en, prio, errno := runtime_irqctl(int(irq), -3)
++func irqStatus(irq IRQ, ctx IntCtx) (enabled bool, prio int, err error) {
++	en, prio, errno := runtime_irqctl(int(irq), -3, int(ctx))
 +	return en != 0, prio, errnoError(errno)
 +}
 +
 +//go:linkname runtime_irqctl runtime.irqctl
-+func runtime_irqctl(irq, ctl int) (enabled, prio, errno int)
++func runtime_irqctl(irq, ctl, ctxid int) (enabled, prio, errno int)
 diff --git a/src/embedded/rtos/irq_noos_riscv64.go b/src/embedded/rtos/irq_noos_riscv64.go
 new file mode 100644
-index 0000000000..75897dbb21
+index 0000000000..75116c379f
 --- /dev/null
 +++ b/src/embedded/rtos/irq_noos_riscv64.go
 @@ -0,0 +1,19 @@
@@ -49189,8 +49250,8 @@ index 0000000000..75897dbb21
 +	intPrioLow      = 2
 +	intPrioLowest   = 1
 +	intPrioCurrent  = 0
-+	intPrioSysTimer = -1
-+	intPrioSysCall  = -2
++	intPrioSysTimer = intPrioHighest + 1
++	intPrioSysCall  = intPrioHighest + 1
 +)
 diff --git a/src/embedded/rtos/irq_noos_thumb.go b/src/embedded/rtos/irq_noos_thumb.go
 new file mode 100644
@@ -49218,10 +49279,10 @@ index 0000000000..7c56432c9b
 +)
 diff --git a/src/embedded/rtos/irq_x.go b/src/embedded/rtos/irq_x.go
 new file mode 100644
-index 0000000000..dd3d98b380
+index 0000000000..8d945f6067
 --- /dev/null
 +++ b/src/embedded/rtos/irq_x.go
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,32 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49241,15 +49302,17 @@ index 0000000000..dd3d98b380
 +	intPrioCurrent  = -1
 +)
 +
-+func irqEnable(irq IRQ, prio int) error {
++type intCtx int
++
++func irqEnable(irq IRQ, prio int, ctx IntCtx) error {
 +	return ErrNotSuppoted
 +}
 +
-+func irqDisable(irq IRQ) error {
++func irqDisable(irq IRQ, ctx IntCtx) error {
 +	return ErrNotSuppoted
 +}
 +
-+func irqStatus(irq IRQ) (enabled bool, prio int, err error) {
++func irqStatus(irq IRQ, ctx IntCtx) (enabled bool, prio int, err error) {
 +	return false, 0, ErrNotSuppoted
 +}
 diff --git a/src/embedded/rtos/nanotime.go b/src/embedded/rtos/nanotime.go
@@ -49596,7 +49659,7 @@ index 0000000000..e110659f27
 +// copied from /home/michal/P/go/goroot/src/runtime/stubs.go
 +func bool2int(x bool) int { return int(uint8(*(*uint8)(unsafe.Pointer(&x)))) }
 diff --git a/src/go/build/deps_test.go b/src/go/build/deps_test.go
-index 8eed6260a2..28ade63806 100644
+index 8eed6260a2..38fa51fd83 100644
 --- a/src/go/build/deps_test.go
 +++ b/src/go/build/deps_test.go
 @@ -36,9 +36,9 @@ var pkgDeps = map[string][]string{
@@ -49604,14 +49667,14 @@ index 8eed6260a2..28ade63806 100644
  	"errors":                  {"runtime", "internal/reflectlite"},
  	"io":                      {"errors", "sync", "sync/atomic"},
 -	"runtime":                 {"unsafe", "runtime/internal/atomic", "runtime/internal/sys", "runtime/internal/math", "internal/cpu", "internal/bytealg"},
-+	"runtime":                 {"unsafe", "runtime/internal/atomic", "runtime/internal/sys", "runtime/internal/math", "internal/cpu", "internal/cpu/cortexm", "internal/cpu/cortexm/nvic", "internal/cpu/cortexm/scb", "internal/cpu/cortexm/scid", "internal/cpu/cortexm/debug/itm", "internal/cpu/cortexm/mpu", "internal/cpu/riscv/clint", "internal/bytealg", "embedded/mmio"},
++	"runtime":                 {"unsafe", "runtime/internal/atomic", "runtime/internal/sys", "runtime/internal/math", "internal/cpu", "internal/cpu/cortexm", "internal/cpu/cortexm/nvic", "internal/cpu/cortexm/scb", "internal/cpu/cortexm/scid", "internal/cpu/cortexm/debug/itm", "internal/cpu/cortexm/mpu", "internal/cpu/riscv/clint", "internal/cpu/riscv/plic", "internal/bytealg", "embedded/mmio"},
  	"runtime/internal/sys":    {},
 -	"runtime/internal/atomic": {"unsafe", "internal/cpu"},
 +	"runtime/internal/atomic": {"unsafe", "internal/cpu", "runtime/internal/sys"},
  	"runtime/internal/math":   {"runtime/internal/sys"},
  	"internal/race":           {"runtime", "unsafe"},
  	"sync":                    {"internal/race", "runtime", "sync/atomic", "unsafe"},
-@@ -453,6 +453,24 @@ var pkgDeps = map[string][]string{
+@@ -453,6 +453,25 @@ var pkgDeps = map[string][]string{
  	"net/http/pprof":    {"L4", "OS", "html/template", "net/http", "runtime/pprof", "runtime/trace"},
  	"net/rpc":           {"L4", "NET", "encoding/gob", "html/template", "net/http", "go/token"},
  	"net/rpc/jsonrpc":   {"L4", "NET", "encoding/json", "net/rpc"},
@@ -49629,6 +49692,7 @@ index 8eed6260a2..28ade63806 100644
 +	"internal/cpu/cortexm/systick":   {"unsafe", "embedded/mmio"},
 +	"internal/cpu/cortexm/debug/itm": {"unsafe", "embedded/mmio"},
 +	"internal/cpu/riscv/clint":       {"unsafe", "embedded/mmio"},
++	"internal/cpu/riscv/plic":        {"unsafe", "embedded/mmio"},
 +	"embedded/mmio":                  {"unsafe"},
 +	"embedded/arch/cortexm/systim":   {"unsafe", "embedded/mmio", "embedded/rtos", "internal/cpu/cortexm", "internal/cpu/cortexm/scb", "internal/cpu/cortexm/systick"},
 +	"embedded/arch/riscv/systim":     {"unsafe", "embedded/mmio", "embedded/rtos", "internal/cpu/riscv/clint"},
@@ -53214,28 +53278,17 @@ index 0000000000..4f874111ec
 +
 +func (rm RMMTIME) Load() MTIME   { return MTIME(rm.UM64.Load()) }
 +func (rm RMMTIME) Store(b MTIME) { rm.UM64.Store(uint64(b)) }
-diff --git a/src/internal/cpu/riscv/plic/doc.go b/src/internal/cpu/riscv/plic/doc.go
-new file mode 100644
-index 0000000000..249738e3a6
---- /dev/null
-+++ b/src/internal/cpu/riscv/plic/doc.go
-@@ -0,0 +1,6 @@
-+// Copyright 2020 The Go Authors. All rights reserved.
-+// Use of this source code is governed by a BSD-style
-+// license that can be found in the LICENSE file.
-+
-+// Package plic provides access to the registers of the Platform-Level Interrupt Controller.
-+package plic
 diff --git a/src/internal/cpu/riscv/plic/periph_riscv64.go b/src/internal/cpu/riscv/plic/periph_riscv64.go
 new file mode 100644
-index 0000000000..a7fdc40661
+index 0000000000..3040abdf4f
 --- /dev/null
 +++ b/src/internal/cpu/riscv/plic/periph_riscv64.go
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,30 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
 +
++// Package plic provides access to the registers of the Platform-Level Interrupt Controller.
 +package plic
 +
 +import (
@@ -54095,10 +54148,10 @@ index 0000000000..16b4b45d97
 +	RET
 diff --git a/src/runtime/asm_riscv64.h b/src/runtime/asm_riscv64.h
 new file mode 100644
-index 0000000000..3bdd02db29
+index 0000000000..b12e9237fa
 --- /dev/null
 +++ b/src/runtime/asm_riscv64.h
-@@ -0,0 +1,177 @@
+@@ -0,0 +1,251 @@
 +#define LR  RA // link register
 +#define TMP T6 // REG_TMP
 +
@@ -54133,6 +54186,7 @@ index 0000000000..3bdd02db29
 +
 +#define MSI (1<<3)
 +#define MTI (1<<7)
++#define SEI (1<<9)
 +#define MEI (1<<11)
 +
 +// core peripherals
@@ -54143,7 +54197,8 @@ index 0000000000..3bdd02db29
 +#define mtime    (CLINT_BASE + 0xBFF8)
 +
 +#define PLIC_BASE 0x0C000000 // true for Qemu Virt, K210, some SiFive cores
-+#define PLIC_EN   (PLIC_BASE + 0x2000)
++#define PLIC_EN   (PLIC_BASE + 0x002000)
++#define PLIC_CC   (PLIC_BASE + 0x200000)
 +
 +// instructinos not implemented by assembly
 +
@@ -54211,71 +54266,143 @@ index 0000000000..3bdd02db29
 +#define _mie (4*8) // cannot be zero, see: tasker_noos_riscv64.s:/SCW
 +#define trapCtxSize (5*8)
 +
-+#define SAVE_GPRS(mp) \
-+\ // LR saved separately
++#define SAVE_GPRS(base,offset) \
++	\ // LR saved separately
 +\ // SP saved separately
-+MOV  GP, (0*8+m_mOS)(mp) \
++MOV  GP, (0*8+offset)(base) \
 +\ // g saved separately
-+MOV  T0, (1*8+m_mOS)(mp) \
-+MOV  T1, (2*8+m_mOS)(mp) \
-+MOV  T2, (3*8+m_mOS)(mp) \
-+MOV  S0, (4*8+m_mOS)(mp) \
-+MOV  S1, (5*8+m_mOS)(mp) \
++MOV  T0, (1*8+offset)(base) \
++MOV  T1, (2*8+offset)(base) \
++MOV  T2, (3*8+offset)(base) \
++MOV  S0, (4*8+offset)(base) \
++MOV  S1, (5*8+offset)(base) \
 +\ // A0 saved separately
-+MOV  A1, (6*8+m_mOS)(mp) \
-+MOV  A2, (7*8+m_mOS)(mp) \
-+MOV  A3, (8*8+m_mOS)(mp) \
-+MOV  A4, (9*8+m_mOS)(mp) \
-+MOV  A5, (10*8+m_mOS)(mp) \
-+MOV  A6, (11*8+m_mOS)(mp) \
-+MOV  A7, (12*8+m_mOS)(mp) \
-+MOV  S2, (13*8+m_mOS)(mp) \
-+MOV  S3, (14*8+m_mOS)(mp) \
-+MOV  S4, (15*8+m_mOS)(mp) \
-+MOV  S5, (16*8+m_mOS)(mp) \
-+MOV  S6, (17*8+m_mOS)(mp) \
-+MOV  S7, (18*8+m_mOS)(mp) \
-+MOV  S8, (19*8+m_mOS)(mp) \
-+MOV  S9, (20*8+m_mOS)(mp) \
-+MOV  S10, (21*8+m_mOS)(mp) \
-+MOV  S11, (22*8+m_mOS)(mp) \
-+MOV  T3, (23*8+m_mOS)(mp) \
-+MOV  T4, (24*8+m_mOS)(mp) \
-+MOV  T5, (25*8+m_mOS)(mp) \
-+MOV  TMP, (26*8+m_mOS)(mp)
++MOV  A1, (6*8+offset)(base) \
++MOV  A2, (7*8+offset)(base) \
++MOV  A3, (8*8+offset)(base) \
++MOV  A4, (9*8+offset)(base) \
++MOV  A5, (10*8+offset)(base) \
++MOV  A6, (11*8+offset)(base) \
++MOV  A7, (12*8+offset)(base) \
++MOV  S2, (13*8+offset)(base) \
++MOV  S3, (14*8+offset)(base) \
++MOV  S4, (15*8+offset)(base) \
++MOV  S5, (16*8+offset)(base) \
++MOV  S6, (17*8+offset)(base) \
++MOV  S7, (18*8+offset)(base) \
++MOV  S8, (19*8+offset)(base) \
++MOV  S9, (20*8+offset)(base) \
++MOV  S10, (21*8+offset)(base) \
++MOV  S11, (22*8+offset)(base) \
++MOV  T3, (23*8+offset)(base) \
++MOV  T4, (24*8+offset)(base) \
++MOV  T5, (25*8+offset)(base) \
++MOV  TMP, (26*8+offset)(base)
 +
-+#define RESTORE_GPRS(mp) \
++#define RESTORE_GPRS(base,offset) \
 +\ // LR loaded separately
 +\ // SP loaded separately
-+MOV  (0*8+m_mOS)(mp), GP \
++MOV  (0*8+offset)(base), GP \
 +\ // g loaded separately
-+MOV  (1*8+m_mOS)(mp), T0 \
-+MOV  (2*8+m_mOS)(mp), T1 \
-+MOV  (3*8+m_mOS)(mp), T2 \
-+MOV  (4*8+m_mOS)(mp), S0 \
-+MOV  (5*8+m_mOS)(mp), S1 \
++MOV  (1*8+offset)(base), T0 \
++MOV  (2*8+offset)(base), T1 \
++MOV  (3*8+offset)(base), T2 \
++MOV  (4*8+offset)(base), S0 \
++MOV  (5*8+offset)(base), S1 \
 +\ // A0 loaded separately
-+MOV  (6*8+m_mOS)(mp), A1 \
-+MOV  (7*8+m_mOS)(mp), A2 \
-+MOV  (8*8+m_mOS)(mp), A3 \
-+MOV  (9*8+m_mOS)(mp), A4 \
-+MOV  (10*8+m_mOS)(mp), A5 \
-+MOV  (11*8+m_mOS)(mp), A6 \
-+MOV  (12*8+m_mOS)(mp), A7 \
-+MOV  (13*8+m_mOS)(mp), S2 \
-+MOV  (14*8+m_mOS)(mp), S3 \
-+MOV  (15*8+m_mOS)(mp), S4 \
-+MOV  (16*8+m_mOS)(mp), S5 \
-+MOV  (17*8+m_mOS)(mp), S6 \
-+MOV  (18*8+m_mOS)(mp), S7 \
-+MOV  (19*8+m_mOS)(mp), S8 \
-+MOV  (20*8+m_mOS)(mp), S9 \
-+MOV  (21*8+m_mOS)(mp), S10 \
-+MOV  (22*8+m_mOS)(mp), S11 \
-+MOV  (23*8+m_mOS)(mp), T3 \
-+MOV  (24*8+m_mOS)(mp), T4 \
-+MOV  (25*8+m_mOS)(mp), T5 \
-+MOV  (26*8+m_mOS)(mp), TMP
++MOV  (6*8+offset)(base), A1 \
++MOV  (7*8+offset)(base), A2 \
++MOV  (8*8+offset)(base), A3 \
++MOV  (9*8+offset)(base), A4 \
++MOV  (10*8+offset)(base), A5 \
++MOV  (11*8+offset)(base), A6 \
++MOV  (12*8+offset)(base), A7 \
++MOV  (13*8+offset)(base), S2 \
++MOV  (14*8+offset)(base), S3 \
++MOV  (15*8+offset)(base), S4 \
++MOV  (16*8+offset)(base), S5 \
++MOV  (17*8+offset)(base), S6 \
++MOV  (18*8+offset)(base), S7 \
++MOV  (19*8+offset)(base), S8 \
++MOV  (20*8+offset)(base), S9 \
++MOV  (21*8+offset)(base), S10 \
++MOV  (22*8+offset)(base), S11 \
++MOV  (23*8+offset)(base), T3 \
++MOV  (24*8+offset)(base), T4 \
++MOV  (25*8+offset)(base), T5 \
++MOV  (26*8+offset)(base), TMP
++
++#define SAVE_FPRS(base,offset) \
++CSRR  (fcsr, tmp) \
++MOV   TMP, (0*8+offset)(base) \
++MOVD  F0, (1*8+offset)(base) \
++MOVD  F1, (2*8+offset)(base) \
++MOVD  F2, (3*8+offset)(base) \
++MOVD  F3, (4*8+offset)(base) \
++MOVD  F4, (5*8+offset)(base) \
++MOVD  F5, (6*8+offset)(base) \
++MOVD  F6, (7*8+offset)(base) \
++MOVD  F7, (8*8+offset)(base) \
++MOVD  F8, (9*8+offset)(base) \
++MOVD  F9, (10*8+offset)(base) \
++MOVD  F10, (11*8+offset)(base) \
++MOVD  F11, (12*8+offset)(base) \
++MOVD  F12, (13*8+offset)(base) \
++MOVD  F13, (14*8+offset)(base) \
++MOVD  F14, (15*8+offset)(base) \
++MOVD  F15, (16*8+offset)(base) \
++MOVD  F16, (17*8+offset)(base) \
++MOVD  F17, (18*8+offset)(base) \
++MOVD  F18, (19*8+offset)(base) \
++MOVD  F19, (20*8+offset)(base) \
++MOVD  F20, (21*8+offset)(base) \
++MOVD  F21, (22*8+offset)(base) \
++MOVD  F22, (23*8+offset)(base) \
++MOVD  F23, (24*8+offset)(base) \
++MOVD  F24, (25*8+offset)(base) \
++MOVD  F25, (26*8+offset)(base) \
++MOVD  F26, (27*8+offset)(base) \
++MOVD  F27, (28*8+offset)(base) \
++MOVD  F28, (29*8+offset)(base) \
++MOVD  F29, (30*8+offset)(base) \
++MOVD  F30, (31*8+offset)(base) \
++MOVD  F31, (32*8+offset)(base)
++
++#define RESTORE_FPRS(base,offset) \
++MOV   (0*8+offset)(base), TMP \
++CSRW  (tmp, fcsr) \
++MOVD  (1*8+offset)(base), F0 \
++MOVD  (2*8+offset)(base), F1 \
++MOVD  (3*8+offset)(base), F2 \
++MOVD  (4*8+offset)(base), F3 \
++MOVD  (5*8+offset)(base), F4 \
++MOVD  (6*8+offset)(base), F5 \
++MOVD  (7*8+offset)(base), F6 \
++MOVD  (8*8+offset)(base), F7 \
++MOVD  (9*8+offset)(base), F8 \
++MOVD  (10*8+offset)(base), F9 \
++MOVD  (11*8+offset)(base), F10 \
++MOVD  (12*8+offset)(base), F11 \
++MOVD  (13*8+offset)(base), F12 \
++MOVD  (14*8+offset)(base), F13 \
++MOVD  (15*8+offset)(base), F14 \
++MOVD  (16*8+offset)(base), F15 \
++MOVD  (17*8+offset)(base), F16 \
++MOVD  (18*8+offset)(base), F17 \
++MOVD  (19*8+offset)(base), F18 \
++MOVD  (20*8+offset)(base), F19 \
++MOVD  (21*8+offset)(base), F20 \
++MOVD  (22*8+offset)(base), F21 \
++MOVD  (23*8+offset)(base), F22 \
++MOVD  (24*8+offset)(base), F23 \
++MOVD  (25*8+offset)(base), F24 \
++MOVD  (26*8+offset)(base), F25 \
++MOVD  (27*8+offset)(base), F26 \
++MOVD  (28*8+offset)(base), F27 \
++MOVD  (29*8+offset)(base), F26 \
++MOVD  (30*8+offset)(base), F29 \
++MOVD  (31*8+offset)(base), F30 \
++MOVD  (32*8+offset)(base), F31
 diff --git a/src/runtime/asm_riscv64.s b/src/runtime/asm_riscv64.s
 index 31dc94ce54..0aca2b370c 100644
 --- a/src/runtime/asm_riscv64.s
@@ -60238,7 +60365,7 @@ index 0000000000..2970ad52e1
 +}
 diff --git a/src/runtime/os_noos.go b/src/runtime/os_noos.go
 new file mode 100644
-index 0000000000..4154f6968f
+index 0000000000..c235c5119b
 --- /dev/null
 +++ b/src/runtime/os_noos.go
 @@ -0,0 +1,134 @@
@@ -60374,7 +60501,7 @@ index 0000000000..4154f6968f
 +func setprivlevel(newlevel int) (oldlevel, errno int)
 +func irqenabled(irq int) (enabled, errno int)
 +func setirqenabled(irq, enabled int) (errno int)
-+func irqctl(irq, ctl int) (enabled, prio, errno int)
++func irqctl(irq, ctl, ctxid int) (enabled, prio, errno int)
 +func nanosleep(ns int64)
 diff --git a/src/runtime/os_noos_thumb.go b/src/runtime/os_noos_thumb.go
 new file mode 100644
@@ -60693,10 +60820,10 @@ index 0000000000..6cdeb88294
 +
 diff --git a/src/runtime/rt0_noos_riscv64.s b/src/runtime/rt0_noos_riscv64.s
 new file mode 100644
-index 0000000000..485b7fc774
+index 0000000000..13c906b01f
 --- /dev/null
 +++ b/src/runtime/rt0_noos_riscv64.s
-@@ -0,0 +1,308 @@
+@@ -0,0 +1,291 @@
 +// Copyright 2020 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -60721,7 +60848,7 @@ index 0000000000..485b7fc774
 +#define handlerStackSize 4*1024 // size of stack usesd by trap handlers
 +#define persistAllocMin 64*1024
 +
-+#define intEnabled (MTI+MSI+MEI)
++#define intEnabled (MTI+MSI+SEI+MEI)
 +
 +DATA runtime·waitInit+0(SB)/4, $-1
 +GLOBL runtime·waitInit(SB), NOPTR, $4
@@ -60927,23 +61054,6 @@ index 0000000000..485b7fc774
 +	// initialize noos tasker and Go scheduler
 +	CALL  runtime·taskerinit(SB)
 +	CALL  runtime·schedinit(SB)
-+
-+	// disable interrupts in PLIC
-+	// BUG: tries to disable all possible interrupts in all possible contexts,
-+	// it accesses reseved address space, can raise Store Access Fault exception
-+	MOV  $PLIC_EN, A0
-+	ADD  $(15872*32*4), A0, A1
-+plicLoop:
-+	MOVW  ZERO, 0(A0)
-+	MOVW  ZERO, 4(A0)
-+	MOVW  ZERO, 8(A0)
-+	MOVW  ZERO, 12(A0)
-+	MOVW  ZERO, 16(A0)
-+	MOVW  ZERO, 20(A0)
-+	MOVW  ZERO, 24(A0)
-+	MOVW  ZERO, 28(A0)
-+	ADD   $32, A0
-+	BNE   A0, A1, plicLoop
 +
 +	// run other harts
 +	MOV   $·waitInit(SB), A0
@@ -62368,10 +62478,10 @@ index 0000000000..c9b247743c
 +	RET
 diff --git a/src/runtime/sys_noos_riscv64.s b/src/runtime/sys_noos_riscv64.s
 new file mode 100644
-index 0000000000..dec747acff
+index 0000000000..531465359b
 --- /dev/null
 +++ b/src/runtime/sys_noos_riscv64.s
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,154 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -62432,10 +62542,13 @@ index 0000000000..dec747acff
 +	EBREAK
 +	JMP  -1(PC)
 +
-+// func irqctl(irq, ctl int) (enabled, prio, errno int)
-+TEXT ·irqctl(SB),NOSPLIT|NOFRAME,$0-20
-+	EBREAK
-+	JMP  -1(PC)
++// func irqctl(irq, ctl, ctxid int) (enabled, prio, errno int)
++TEXT ·irqctl(SB),NOSPLIT|NOFRAME,$0-48
++	MOV  $SYS_irqctl, A3
++	MOV  $(24+8), A4
++	MOV  $24, A5
++	ECALL
++	RET
 +
 +// func setprivlevel(newlevel int) (oldlevel, errno int)
 +TEXT ·setprivlevel(SB),NOSPLIT|NOFRAME,$0-24
@@ -62525,7 +62638,7 @@ index 0000000000..dec747acff
 +	JMP  -1(PC)
 diff --git a/src/runtime/sys_noos_thumb.s b/src/runtime/sys_noos_thumb.s
 new file mode 100644
-index 0000000000..ab0d0b6c07
+index 0000000000..851c03c337
 --- /dev/null
 +++ b/src/runtime/sys_noos_thumb.s
 @@ -0,0 +1,158 @@
@@ -62584,10 +62697,10 @@ index 0000000000..ab0d0b6c07
 +	SWI
 +	RET
 +
-+// func irqctl(irq, ctl int) (enabled, prio, errno int)
-+TEXT ·irqctl(SB),NOSPLIT|NOFRAME,$0-20
++// func irqctl(irq, ctl, ctxid int) (enabled, prio, errno int)
++TEXT ·irqctl(SB),NOSPLIT|NOFRAME,$0-24
 +	MOVW  $SYS_irqctl, R4
-+	MOVW  $(8+4), R5
++	MOVW  $(12+4), R5
 +	MOVW  $12, R6
 +	SWI
 +	RET
@@ -62723,10 +62836,10 @@ index 0000000000..a8fb827805
 +#define SYS_NUM           14
 diff --git a/src/runtime/tasker_noos.go b/src/runtime/tasker_noos.go
 new file mode 100644
-index 0000000000..9c0e5a9a74
+index 0000000000..b0063c8f97
 --- /dev/null
 +++ b/src/runtime/tasker_noos.go
-@@ -0,0 +1,572 @@
+@@ -0,0 +1,566 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -62768,12 +62881,6 @@ index 0000000000..9c0e5a9a74
 +// - cgoCallersUse, caughtsig : used by tasker.
 +//
 +// Tasker relies on the following architecture-specific functions:
-+//
-+// taskerpreinit, taskerinit
-+//
-+// These functions should initialize the tasker. Taskerpreinit is run before the
-+// Go scheduler and memory allocator are ready. It should setup a minimal
-+// enviroment for them.
 +//
 +// curcpuSleep
 +//
@@ -63301,10 +63408,10 @@ index 0000000000..9c0e5a9a74
 +func msetwt(m *m, wt *msl) { m.caughtsig = guintptr(unsafe.Pointer(wt)) }
 diff --git a/src/runtime/tasker_noos_riscv64.go b/src/runtime/tasker_noos_riscv64.go
 new file mode 100644
-index 0000000000..a5ee4e78fe
+index 0000000000..e3848f3e23
 --- /dev/null
 +++ b/src/runtime/tasker_noos_riscv64.go
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,125 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -63313,6 +63420,7 @@ index 0000000000..a5ee4e78fe
 +
 +import (
 +	"internal/cpu/riscv/clint"
++	"internal/cpu/riscv/plic"
 +	"unsafe"
 +)
 +
@@ -63351,6 +63459,7 @@ index 0000000000..a5ee4e78fe
 +//go:nosplit
 +func taskerinit() {
 +	// only hart0 runs this function
++
 +	uharts := (*[maxHarts]uintptr)(unsafe.Pointer(&pharts))
 +	for i := range harts {
 +		hart := &harts[i]
@@ -63362,6 +63471,17 @@ index 0000000000..a5ee4e78fe
 +	allcpu.len = 1
 +	allcpu.cap = maxHarts
 +	curcpu().exe.set(getg().m)
++
++	// disable interrupts in PLIC
++	// BUG: tries to disable all possible interrupts in all possible contexts,
++	// accesses reseved address space, can raise Store Access Fault exception
++	PLIC := plic.PLIC()
++	for ctxid := range PLIC.EN {
++		for i := range PLIC.EN[ctxid] {
++			PLIC.EN[ctxid][i].Store(0)
++		}
++		PLIC.TC[ctxid].THR.Store(0)
++	}
 +}
 +
 +//go:nowritebarrierrec
@@ -63384,13 +63504,45 @@ index 0000000000..a5ee4e78fe
 +
 +func syssetprivlevel(newlevel int) (oldlevel, errno int)
 +
-+func sysirqctl(irq, ctl int) (enabled, prio, errno int) { breakpoint(); return }
++var plicmx cpumtx
++
++//go:nowritebarrierrec
++//go:nosplit
++func sysirqctl(irq, ctl, ctxid int) (enabled, prio, errno int) {
++	PLIC := plic.PLIC()
++	if uint(irq) > uint(len(PLIC.PRIO)) {
++		errno = 4 // rtos.ErrBadIntNumber
++		return
++	}
++	if uint(ctxid) > uint(len(PLIC.EN)) {
++		errno = 6 // rtos.ErrBadIntCtx
++	}
++	// rtos package ensures valid ctl
++	if ctl >= 0 {
++		PLIC.PRIO[irq].Store(uint32(ctl))
++	}
++	rn, bn := irq>>5, irq&31
++	switch {
++	case ctl >= -1:
++		plicmx.lock()
++		PLIC.EN[ctxid][rn].SetBit(bn)
++		plicmx.unlock()
++	case ctl == -2:
++		plicmx.lock()
++		PLIC.EN[ctxid][rn].ClearBit(bn)
++		plicmx.unlock()
++	default:
++		enabled = int(PLIC.EN[ctxid][rn].Load()) >> bn & 1
++		prio = int(PLIC.PRIO[irq].Load())
++	}
++	return
++}
 diff --git a/src/runtime/tasker_noos_riscv64.s b/src/runtime/tasker_noos_riscv64.s
 new file mode 100644
-index 0000000000..60810c9dbc
+index 0000000000..8395db8f75
 --- /dev/null
 +++ b/src/runtime/tasker_noos_riscv64.s
-@@ -0,0 +1,530 @@
+@@ -0,0 +1,489 @@
 +// Copyright 2020 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -63418,7 +63570,7 @@ index 0000000000..60810c9dbc
 +DATA runtime·interruptHandlers+(6*8)(SB)/8, $·defaultHandler(SB)
 +DATA runtime·interruptHandlers+(7*8)(SB)/8, $·enterScheduler(SB)
 +DATA runtime·interruptHandlers+(8*8)(SB)/8, $·defaultHandler(SB)
-+DATA runtime·interruptHandlers+(9*8)(SB)/8, $·defaultHandler(SB)
++DATA runtime·interruptHandlers+(9*8)(SB)/8, $·externalInterruptHandler(SB)
 +DATA runtime·interruptHandlers+(10*8)(SB)/8, $·defaultHandler(SB)
 +DATA runtime·interruptHandlers+(11*8)(SB)/8, $·externalInterruptHandler(SB)
 +#define interruptHandlersSize (12*8)
@@ -63440,7 +63592,7 @@ index 0000000000..60810c9dbc
 +GLOBL runtime·exceptionHandlers(SB), RODATA, $exceptionHandlersSize
 +
 +
-+#define sysMaxArgs (32+8)
++#define sysMaxArgs (48+8)
 +#define envCallFrameSize (sysMaxArgs+3*8)
 +
 +
@@ -63458,8 +63610,9 @@ index 0000000000..60810c9dbc
 +// MTI, MSI - timer and software interrupts have the same, lowest priority,
 +//            both used to enter or wakeup the scheduler,
 +//
-+// MEI      - external interrupt has higher priority than MTI and MSI, it can
-+//            preempt and wakeup the scheduler.
++// SEI, MEI - external interrupts have higher priority than MTI and MSI, they
++//            can preempt and wakeup the scheduler, MEI has higher priority
++//            than SEI.
 +//
 +// We don't support supervisor or user mode interrupts. The platform-specific
 +// interrupts with id >= 16 (local interrupts) are probably supported (with
@@ -63495,12 +63648,12 @@ index 0000000000..60810c9dbc
 +	// mie will be saved below
 +
 +	// mask same or lower priority interrupts (always mask MSI and MTI)
-+	CSRR  (mcause, a0)
-+	SRA   $63, A0, LR
-+	AND   LR, A0  // interrupt: A0=mcause, exception: A0=0
-+	MOV   $~1, LR
-+	SLL   A0, LR      // only 6 lower bits of A0 are used as shift amount
-+	AND   $~0xFF, LR  // always mask software and timer interrupts
++	CSRR  (mcause, lr)
++	SRA   $63, LR, A0
++	AND   A0, LR  // interrupt: LR=mcause, exception: LR=0
++	MOV   $~1, A0
++	SLL   LR, A0      // only 6 lower bits of LR are used as shift amount
++	AND   $~0xFF, A0  // always mask software and timer interrupts
 +	CSRR  (mie, lr)
 +	AND   LR, A0
 +	CSRW  (a0, mie)
@@ -63543,7 +63696,7 @@ index 0000000000..60810c9dbc
 +	BNE   ZERO, A0, contextSaved
 +
 +	MOV        (cpuctx_exe)(g), A0
-+	SAVE_GPRS  (A0)  // save most of GPRs
++	SAVE_GPRS  (A0, m_mOS)  // save most of GPRs
 +
 +	// save the remaining registers: LR, SP, g, status, mepc
 +	MOV  _LR(X2), A1
@@ -63590,8 +63743,8 @@ index 0000000000..60810c9dbc
 +	// no need to restore FPRs if exe didn't changed
 +	MOVB          (cpuctx_newexe)(g), A1
 +	BEQ           ZERO, A1, 2(PC)
-+	CALL          ·restoreFPRs(SB)  // clobbers LR, TMP
-+	RESTORE_GPRS  (A0)              // restore most of GPRs
++	RESTORE_FPRS  (A0, m_mOS+const_numGPRS*8)  // clobbers TMP
++	RESTORE_GPRS  (A0, m_mOS)                  // restore most of GPRs
 +smallCtx:
 +	MOVB  ZERO, (cpuctx_newexe)(g)  // clear cpuctx.newexe
 +	SCW   (zero, zero, x2)          // invalidate dangling LR
@@ -63626,17 +63779,42 @@ index 0000000000..60810c9dbc
 +
 +
 +TEXT runtime·externalInterruptHandler(SB),NOSPLIT|NOFRAME,$0
++	ADD        $-(const_numGPRS+33+2)*8, X2
++	SAVE_GPRS  (X2, 2*8)
++	SAVE_FPRS  (X2, (2+const_numGPRS)*8)
 +
-+	EBREAK
-+	JMP  -1(PC)
++	// BUG: the following code assumes two (M, S) PLIC contexts per hart
++	// ctxid = mhartid*2 + (11-mcause)/2
++	CSRR  (mhartid, a1)
++	SLL   $5, A1
++	SUB   A0, A1  // mhartid*32 - mcause*8
++	SLL   $8, A1
++	ADD   $(PLIC_CC+4+11*0x1000/2), A1
++	MOV   A1, (X2)
 +
-+	// rise software interrupt
-+	MOV   $msip, A0
-+	CSRR  (mhartid, lr)
-+	SLL   $2, LR  // msip registers are 32-bit
-+	ADD   LR, A0
-+	MOV   $1, LR
-+	MOVW  LR, (A0)
++loop:
++	MOVW  (A1), S0  // claim
++	BEQ   ZERO, S0, done
++	MOV   S0, 8(X2)
++
++	MOV  $runtime·vectors(SB), A0
++	MOV  (A0), S1
++	BGE  S0, S1, noHandler
++	SLL  $3, S0
++	ADD  S0, A0
++	MOV  (A0), A0
++
++	CALL  A0  // call user handler (IRQn_Handler)
++
++	MOV   (X2), A1
++	MOV   8(X2), S0
++	MOVW  S0, (A1)  // complete
++	JMP   loop
++
++done:
++	RESTORE_FPRS  (X2, (2+const_numGPRS)*8)
++	RESTORE_GPRS  (X2, 2*8)
++	ADD           $(const_numGPRS+33+2)*8, X2
 +
 +	MOV  _LR(X2), LR  // restore LR
 +
@@ -63661,6 +63839,9 @@ index 0000000000..60810c9dbc
 +	MOV  _A0(X2), A0  // restore A0
 +	ADD  $trapCtxSize, X2
 +	MRET
++
++noHandler:
++	JMP  ·unhandledExternalInterrupt(SB)
 +
 +
 +// System call is like oridnary function call so all registers except LR are
@@ -63782,85 +63963,15 @@ index 0000000000..60810c9dbc
 +	JMP  -1(PC)
 +
 +
-+// curcpuSavectxSched saves floating-point registers to memory at
-+// A0 + m_mOS + numGPRS*8 using TMP (T6) as scratch register
++TEXT runtime·unhandledExternalInterrupt(SB),NOSPLIT|NOFRAME,$0
++	EBREAK
++	JMP  -1(PC)
++
++
++// curcpuSavectxSched saves floating-point registers to m.mOS
 +TEXT ·curcpuSavectxSched(SB),NOSPLIT|NOFRAME,$0
-+	MOV  (cpuctx_exe)(g), A0
-+saveFPRs: // calls from assembly can enter here
-+	CSRR  (fcsr, tmp)
-+	MOV   TMP, ((0+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F0, ((1+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F1, ((2+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F2, ((3+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F3, ((4+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F4, ((5+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F5, ((6+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F6, ((7+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F7, ((8+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F8, ((9+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F9, ((10+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F10, ((11+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F11, ((12+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F12, ((13+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F13, ((14+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F14, ((15+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F15, ((16+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F16, ((17+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F17, ((18+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F18, ((19+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F19, ((20+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F20, ((21+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F21, ((22+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F22, ((23+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F23, ((24+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F24, ((25+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F25, ((26+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F26, ((27+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F27, ((28+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F28, ((29+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F29, ((30+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F30, ((31+const_numGPRS)*8+m_mOS)(A0)
-+	MOVD  F31, ((32+const_numGPRS)*8+m_mOS)(A0)
-+	RET
-+
-+
-+// restoreFPRs restores floating-point registers from memory at
-+// A0 + m_mOS + numGPRS*8 using TMP (T6) as scratch register
-+TEXT runtime·restoreFPRs(SB),NOSPLIT|NOFRAME,$0
-+	MOV   ((0+const_numGPRS)*8+m_mOS)(A0), TMP
-+	CSRW  (tmp, fcsr)
-+	MOVD  ((1+const_numGPRS)*8+m_mOS)(A0), F0
-+	MOVD  ((2+const_numGPRS)*8+m_mOS)(A0), F1
-+	MOVD  ((3+const_numGPRS)*8+m_mOS)(A0), F2
-+	MOVD  ((4+const_numGPRS)*8+m_mOS)(A0), F3
-+	MOVD  ((5+const_numGPRS)*8+m_mOS)(A0), F4
-+	MOVD  ((6+const_numGPRS)*8+m_mOS)(A0), F5
-+	MOVD  ((7+const_numGPRS)*8+m_mOS)(A0), F6
-+	MOVD  ((8+const_numGPRS)*8+m_mOS)(A0), F7
-+	MOVD  ((9+const_numGPRS)*8+m_mOS)(A0), F8
-+	MOVD  ((10+const_numGPRS)*8+m_mOS)(A0), F9
-+	MOVD  ((11+const_numGPRS)*8+m_mOS)(A0), F10
-+	MOVD  ((12+const_numGPRS)*8+m_mOS)(A0), F11
-+	MOVD  ((13+const_numGPRS)*8+m_mOS)(A0), F12
-+	MOVD  ((14+const_numGPRS)*8+m_mOS)(A0), F13
-+	MOVD  ((15+const_numGPRS)*8+m_mOS)(A0), F14
-+	MOVD  ((16+const_numGPRS)*8+m_mOS)(A0), F15
-+	MOVD  ((17+const_numGPRS)*8+m_mOS)(A0), F16
-+	MOVD  ((18+const_numGPRS)*8+m_mOS)(A0), F17
-+	MOVD  ((19+const_numGPRS)*8+m_mOS)(A0), F18
-+	MOVD  ((20+const_numGPRS)*8+m_mOS)(A0), F19
-+	MOVD  ((21+const_numGPRS)*8+m_mOS)(A0), F20
-+	MOVD  ((22+const_numGPRS)*8+m_mOS)(A0), F21
-+	MOVD  ((23+const_numGPRS)*8+m_mOS)(A0), F22
-+	MOVD  ((24+const_numGPRS)*8+m_mOS)(A0), F23
-+	MOVD  ((25+const_numGPRS)*8+m_mOS)(A0), F24
-+	MOVD  ((26+const_numGPRS)*8+m_mOS)(A0), F25
-+	MOVD  ((27+const_numGPRS)*8+m_mOS)(A0), F26
-+	MOVD  ((28+const_numGPRS)*8+m_mOS)(A0), F27
-+	MOVD  ((29+const_numGPRS)*8+m_mOS)(A0), F26
-+	MOVD  ((30+const_numGPRS)*8+m_mOS)(A0), F29
-+	MOVD  ((31+const_numGPRS)*8+m_mOS)(A0), F30
-+	MOVD  ((32+const_numGPRS)*8+m_mOS)(A0), F31
++	MOV        (cpuctx_exe)(g), A0
++	SAVE_FPRS  (A0, m_mOS+const_numGPRS*8)
 +	RET
 +
 +
@@ -63923,10 +64034,10 @@ index 0000000000..60810c9dbc
 +	RET
 diff --git a/src/runtime/tasker_noos_thumb.go b/src/runtime/tasker_noos_thumb.go
 new file mode 100644
-index 0000000000..0b3abfa0b2
+index 0000000000..b5d9e0bfd4
 --- /dev/null
 +++ b/src/runtime/tasker_noos_thumb.go
-@@ -0,0 +1,281 @@
+@@ -0,0 +1,285 @@
 +// Copyright 2019 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -64138,24 +64249,28 @@ index 0000000000..0b3abfa0b2
 +
 +//go:nowritebarrierrec
 +//go:nosplit
-+func sysirqctl(irq, ctl int) (enabled, prio, errno int) {
++func sysirqctl(irq, ctl, ctxid int) (enabled, prio, errno int) {
 +	if uint(irq) >= irqNum() {
 +		errno = 4 // rtos.ErrBadIntNumber
 +		return
++	}
++	if uint(ctxid) > 0 {
++		errno = 6 // rtos.ErrBadIntCtx
 +	}
 +	NVIC := nvic.NVIC()
 +	// rtos package ensures valid ctl
 +	if ctl >= 0 {
 +		NVIC.IPR[irq].Store(nvic.IPR(255 - ctl))
 +	}
-+	rn, bo := irq>>5, uint(irq&31)
++	rn, bn := irq>>5, uint(irq&31)
 +	switch {
 +	case ctl >= -1:
-+		NVIC.ISER[rn].Store(1 << bo)
++		NVIC.ISER[rn].Store(1 << bn)
 +	case ctl == -2:
-+		NVIC.ICER[rn].Store(1 << bo)
++		NVIC.ICER[rn].Store(1 << bn)
 +	default:
-+		enabled = int(NVIC.ISER[irq>>5].Load()) >> bo
++		enabled = int(NVIC.ISER[irq>>5].Load()) >> bn & 1
++		prio = 255 - int(NVIC.IPR[irq].Load())
 +	}
 +	return
 +}
@@ -64210,7 +64325,7 @@ index 0000000000..0b3abfa0b2
 +type mOS [7]uint32
 diff --git a/src/runtime/tasker_noos_thumb.s b/src/runtime/tasker_noos_thumb.s
 new file mode 100644
-index 0000000000..28f4e3741a
+index 0000000000..dba797dfee
 --- /dev/null
 +++ b/src/runtime/tasker_noos_thumb.s
 @@ -0,0 +1,327 @@
@@ -64327,7 +64442,7 @@ index 0000000000..28f4e3741a
 +	B   ·faultHandler(SB)
 +
 +
-+#define sysMaxArgs (20+4) // max. size of argumants and return values + LR
++#define sysMaxArgs (24+4) // max. size of argumants and return values + LR
 +
 +
 +// svcallHandler handles synhronous SVCall exception generated by SWI (SVC)
