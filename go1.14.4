@@ -54148,7 +54148,7 @@ index 0000000000..16b4b45d97
 +	RET
 diff --git a/src/runtime/asm_riscv64.h b/src/runtime/asm_riscv64.h
 new file mode 100644
-index 0000000000..b12e9237fa
+index 0000000000..bd284abf61
 --- /dev/null
 +++ b/src/runtime/asm_riscv64.h
 @@ -0,0 +1,251 @@
@@ -54198,7 +54198,7 @@ index 0000000000..b12e9237fa
 +
 +#define PLIC_BASE 0x0C000000 // true for Qemu Virt, K210, some SiFive cores
 +#define PLIC_EN   (PLIC_BASE + 0x002000)
-+#define PLIC_CC   (PLIC_BASE + 0x200000)
++#define PLIC_TC   (PLIC_BASE + 0x200000)
 +
 +// instructinos not implemented by assembly
 +
@@ -63539,10 +63539,10 @@ index 0000000000..e3848f3e23
 +}
 diff --git a/src/runtime/tasker_noos_riscv64.s b/src/runtime/tasker_noos_riscv64.s
 new file mode 100644
-index 0000000000..8395db8f75
+index 0000000000..5d00e48c54
 --- /dev/null
 +++ b/src/runtime/tasker_noos_riscv64.s
-@@ -0,0 +1,489 @@
+@@ -0,0 +1,491 @@
 +// Copyright 2020 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -63783,19 +63783,21 @@ index 0000000000..8395db8f75
 +	SAVE_GPRS  (X2, 2*8)
 +	SAVE_FPRS  (X2, (2+const_numGPRS)*8)
 +
-+	// BUG: the following code assumes two (M, S) PLIC contexts per hart
++	// BUG: the following code assumes two (M,S) PLIC contexts per hart
 +	// ctxid = mhartid*2 + (11-mcause)/2
++	// SiFive U54-MC as example has one minion core (M) and four app cores (M,S)
++	SRL   $3, A0  // mcause
 +	CSRR  (mhartid, a1)
-+	SLL   $5, A1
-+	SUB   A0, A1  // mhartid*32 - mcause*8
-+	SLL   $8, A1
-+	ADD   $(PLIC_CC+4+11*0x1000/2), A1
++	SLL   $2, A1
++	SUB   A0, A1  // mhartid*4 - mcause
++	SLL   $11, A1
++	ADD   $(PLIC_TC+11*0x1000/2), A1
 +	MOV   A1, (X2)
 +
 +loop:
-+	MOVW  (A1), S0  // claim
++	MOVW  4(A1), S0  // claim
 +	BEQ   ZERO, S0, done
-+	MOV   S0, 8(X2)
++	MOVW  S0, 8(X2)
 +
 +	MOV  $runtime·vectors(SB), A0
 +	MOV  (A0), S1
@@ -63807,8 +63809,8 @@ index 0000000000..8395db8f75
 +	CALL  A0  // call user handler (IRQn_Handler)
 +
 +	MOV   (X2), A1
-+	MOV   8(X2), S0
-+	MOVW  S0, (A1)  // complete
++	MOVW  8(X2), S0
++	MOVW  S0, 4(A1)  // complete
 +	JMP   loop
 +
 +done:
