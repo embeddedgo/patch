@@ -36663,7 +36663,7 @@ index 8814bad4ae..21641e534f 100644
  		f.xahdr.Osnentry = f.getXCOFFscnum(entry.Sect)
  		toc := ctxt.Syms.ROLookup("TOC", 0)
 diff --git a/src/cmd/link/internal/riscv64/asm.go b/src/cmd/link/internal/riscv64/asm.go
-index b0897288fc..6dd703b282 100644
+index b0897288fc..bd68faf3f3 100644
 --- a/src/cmd/link/internal/riscv64/asm.go
 +++ b/src/cmd/link/internal/riscv64/asm.go
 @@ -14,7 +14,70 @@ import (
@@ -36696,7 +36696,7 @@ index b0897288fc..6dd703b282 100644
 +
 +	// search for user defined ISRs: //go:linkname functionName IRQ%d_Handler
 +	var irqHandlers [1024]*sym.Symbol // BUG: 1024 is PLIC specific
-+	irqNum := 0
++	irqNum := 1
 +	for i := 1; i < len(irqHandlers); i++ {
 +		s := lookupFuncSym(ctxt.Syms, ld.InterruptHandler(i))
 +		if s == nil {
