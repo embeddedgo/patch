@@ -46327,7 +46327,7 @@ index 0000000000..385e3d0a97
 +)
 diff --git a/src/runtime/const_noos_stm32h7.go b/src/runtime/const_noos_stm32h7.go
 new file mode 100644
-index 0000000000..f1cfbd0bbb
+index 0000000000..f322df61f5
 --- /dev/null
 +++ b/src/runtime/const_noos_stm32h7.go
 @@ -0,0 +1,33 @@
@@ -46336,7 +46336,7 @@ index 0000000000..f1cfbd0bbb
 +// license that can be found in the LICENSE file.
 +
 +// +build noos
-+// +build stm32h743
++// +build stm32h7x3
 +
 +package runtime
 +
