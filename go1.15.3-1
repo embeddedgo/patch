@@ -1,6 +1,6 @@
 diff --git a/api/go1embedded.txt b/api/go1embedded.txt
 new file mode 100644
-index 0000000000..8855bccf79
+index 0000000000..958139ba54
 --- /dev/null
 +++ b/api/go1embedded.txt
 @@ -0,0 +1,115 @@
@@ -99,7 +99,7 @@ index 0000000000..8855bccf79
 +pkg embedded/rtos, const IntPrioSysTimer ideal-int
 +pkg embedded/rtos, func Nanotime() time.Duration
 +pkg embedded/rtos, func SetPrivLevel(int) (int, error)
-+pkg embedded/rtos, func SetSystemTimer(func() int64, func(int64) bool) error
++pkg embedded/rtos, func SetSystemTimer(func() int64, func(int64)) error
 +pkg embedded/rtos, func SetSystemWriter(func(int, []uint8) int) error
 +pkg embedded/rtos, method (*Error) Error() string
 +pkg embedded/rtos, method (*Note) Clear()
@@ -1147,7 +1147,7 @@ index fdff3bbdeb..94ac3a1a4e 100644
  		c.PtrSize = 8
  		c.RegSize = 8
 diff --git a/src/cmd/compile/internal/ssa/gen/RISCV64.rules b/src/cmd/compile/internal/ssa/gen/RISCV64.rules
-index 9437c8e9d4..7f48ea563f 100644
+index 9437c8e9d4..58d17bda9d 100644
 --- a/src/cmd/compile/internal/ssa/gen/RISCV64.rules
 +++ b/src/cmd/compile/internal/ssa/gen/RISCV64.rules
 @@ -368,6 +368,13 @@
@@ -1157,8 +1157,8 @@ index 9437c8e9d4..7f48ea563f 100644
 +// Medium zeroing uses a duff device
 +// 8, and 128 are magic constants, see runtime/mkduff.go
 +(Zero [s] {t} ptr mem)
-+	&& s%8 == 0 && s > 24 && s <= 8*128
-+	&& t.(*types.Type).Alignment()%8 == 0 && !config.noDuffDevice ->
++	&& s%8 == 0 && s >= 16 && s <= 8*128
++	&& t.Alignment()%8 == 0 && !config.noDuffDevice =>
 +	(DUFFZERO [8 * (128 - s/8)] ptr mem)
 +
  // Generic zeroing uses a loop
@@ -1170,8 +1170,8 @@ index 9437c8e9d4..7f48ea563f 100644
  
 +// Medium move uses a duff device
 +(Move [s] {t} dst src mem)
-+	&& s%8 == 0 && s >= 24 && s <= 8*128 && t.(*types.Type).Alignment()%8 == 0
-+	&& !config.noDuffDevice && logLargeCopy(v, s) ->
++	&& s%8 == 0 && s >= 16 && s <= 8*128 && t.Alignment()%8 == 0
++	&& !config.noDuffDevice && logLargeCopy(v, s) =>
 +	(DUFFCOPY [16 * (128 - s/8)] dst src mem)
 +
  // Generic move uses a loop
@@ -7609,34 +7609,26 @@ index 2152b1675a..314fe03dd6 100644
  	}
  	return false
 diff --git a/src/cmd/compile/internal/ssa/rewriteRISCV64.go b/src/cmd/compile/internal/ssa/rewriteRISCV64.go
-index c178290343..d81716bb9d 100644
+index c178290343..7a4a1345e3 100644
 --- a/src/cmd/compile/internal/ssa/rewriteRISCV64.go
 +++ b/src/cmd/compile/internal/ssa/rewriteRISCV64.go
-@@ -4,6 +4,7 @@
- package ssa
- 
- import "math"
-+import "cmd/compile/internal/types"
- 
- func rewriteValueRISCV64(v *Value) bool {
- 	switch v.Op {
-@@ -1987,6 +1988,23 @@ func rewriteValueRISCV64_OpMove(v *Value) bool {
+@@ -1987,6 +1987,23 @@ func rewriteValueRISCV64_OpMove(v *Value) bool {
  		return true
  	}
  	// match: (Move [s] {t} dst src mem)
-+	// cond: s%8 == 0 && s >= 24 && s <= 8*128 && t.(*types.Type).Alignment()%8 == 0 && !config.noDuffDevice && logLargeCopy(v, s)
++	// cond: s%8 == 0 && s >= 16 && s <= 8*128 && t.Alignment()%8 == 0 && !config.noDuffDevice && logLargeCopy(v, s)
 +	// result: (DUFFCOPY [16 * (128 - s/8)] dst src mem)
 +	for {
-+		s := v.AuxInt
-+		t := v.Aux
++		s := auxIntToInt64(v.AuxInt)
++		t := auxToType(v.Aux)
 +		dst := v_0
 +		src := v_1
 +		mem := v_2
-+		if !(s%8 == 0 && s >= 24 && s <= 8*128 && t.(*types.Type).Alignment()%8 == 0 && !config.noDuffDevice && logLargeCopy(v, s)) {
++		if !(s%8 == 0 && s >= 16 && s <= 8*128 && t.Alignment()%8 == 0 && !config.noDuffDevice && logLargeCopy(v, s)) {
 +			break
 +		}
 +		v.reset(OpRISCV64DUFFCOPY)
-+		v.AuxInt = 16 * (128 - s/8)
++		v.AuxInt = int64ToAuxInt(16 * (128 - s/8))
 +		v.AddArg3(dst, src, mem)
 +		return true
 +	}
@@ -7644,22 +7636,22 @@ index c178290343..d81716bb9d 100644
  	// cond: (s <= 16 || logLargeCopy(v, s))
  	// result: (LoweredMove [t.Alignment()] dst src (ADDI <src.Type> [s-moveSize(t.Alignment(), config)] src) mem)
  	for {
-@@ -5000,6 +5018,22 @@ func rewriteValueRISCV64_OpZero(v *Value) bool {
+@@ -5000,6 +5017,22 @@ func rewriteValueRISCV64_OpZero(v *Value) bool {
  		return true
  	}
  	// match: (Zero [s] {t} ptr mem)
-+	// cond: s%8 == 0 && s > 24 && s <= 8*128 && t.(*types.Type).Alignment()%8 == 0 && !config.noDuffDevice
++	// cond: s%8 == 0 && s >= 16 && s <= 8*128 && t.Alignment()%8 == 0 && !config.noDuffDevice
 +	// result: (DUFFZERO [8 * (128 - s/8)] ptr mem)
 +	for {
-+		s := v.AuxInt
-+		t := v.Aux
++		s := auxIntToInt64(v.AuxInt)
++		t := auxToType(v.Aux)
 +		ptr := v_0
 +		mem := v_1
-+		if !(s%8 == 0 && s > 24 && s <= 8*128 && t.(*types.Type).Alignment()%8 == 0 && !config.noDuffDevice) {
++		if !(s%8 == 0 && s >= 16 && s <= 8*128 && t.Alignment()%8 == 0 && !config.noDuffDevice) {
 +			break
 +		}
 +		v.reset(OpRISCV64DUFFZERO)
-+		v.AuxInt = 8 * (128 - s/8)
++		v.AuxInt = int64ToAuxInt(8 * (128 - s/8))
 +		v.AddArg2(ptr, mem)
 +		return true
 +	}
@@ -39124,10 +39116,10 @@ index 0000000000..363716df9c
 +}
 diff --git a/src/embedded/arch/riscv/systim/systim_riscv64.go b/src/embedded/arch/riscv/systim/systim_riscv64.go
 new file mode 100644
-index 0000000000..3fcedd4af2
+index 0000000000..fd71960056
 --- /dev/null
 +++ b/src/embedded/arch/riscv/systim/systim_riscv64.go
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,57 @@
 +// Copyright 2020 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -39156,13 +39148,12 @@ index 0000000000..3fcedd4af2
 +}
 +
 +//go:nosplit
-+func setAlarm(ns int64) bool {
++func setAlarm(ns int64) {
 +	timecmp := uint64(1<<64 - 1)
 +	if ns >= 0 {
 +		timecmp = mulDivUp(uint64(ns), timerHz, 1e9)
 +	}
 +	clint.CLINT().MTIMECMP[cpuid()].U64.Store(timecmp)
-+	return true
 +}
 +
 +//go:nosplit
@@ -40455,7 +40446,7 @@ index 0000000000..2b03a6b291
 +}
 diff --git a/src/embedded/rtos/systim.go b/src/embedded/rtos/systim.go
 new file mode 100644
-index 0000000000..c98bf56108
+index 0000000000..4ba4e3910f
 --- /dev/null
 +++ b/src/embedded/rtos/systim.go
 @@ -0,0 +1,36 @@
@@ -40492,12 +40483,12 @@ index 0000000000..c98bf56108
 +// implementation at a later stage (which is discouraged) you must ensure a
 +// continuity of time and that all gorutines that sleeeps using old setalarm
 +// function will be wakeup.
-+func SetSystemTimer(nanotime func() int64, setalarm func(ns int64) bool) error {
++func SetSystemTimer(nanotime func() int64, setalarm func(ns int64)) error {
 +	return setSystemTimer(nanotime, setalarm)
 +}
 diff --git a/src/embedded/rtos/systim_noos.go b/src/embedded/rtos/systim_noos.go
 new file mode 100644
-index 0000000000..6976db220a
+index 0000000000..e45f8ba9d1
 --- /dev/null
 +++ b/src/embedded/rtos/systim_noos.go
 @@ -0,0 +1,23 @@
@@ -40514,7 +40505,7 @@ index 0000000000..6976db220a
 +
 +var setsystimmx sync.Mutex
 +
-+func setSystemTimer(nanotime func() int64, setalarm func(ns int64) bool) error {
++func setSystemTimer(nanotime func() int64, setalarm func(ns int64)) error {
 +	setsystimmx.Lock()
 +	runtime_setsystim(nanotime, setalarm)
 +	setsystimmx.Unlock()
@@ -40522,11 +40513,11 @@ index 0000000000..6976db220a
 +}
 +
 +//go:linkname runtime_setsystim runtime.setsystim
-+func runtime_setsystim(nanotime func() int64, setalarm func(ns int64) bool)
++func runtime_setsystim(nanotime func() int64, setalarm func(ns int64))
 +
 diff --git a/src/embedded/rtos/systim_x.go b/src/embedded/rtos/systim_x.go
 new file mode 100644
-index 0000000000..1e772fefed
+index 0000000000..13abaa4584
 --- /dev/null
 +++ b/src/embedded/rtos/systim_x.go
 @@ -0,0 +1,11 @@
@@ -40538,7 +40529,7 @@ index 0000000000..1e772fefed
 +
 +package rtos
 +
-+func setSystemTimer(nanotime func() int64, setalarm func(ns int64) bool) error {
++func setSystemTimer(nanotime func() int64, setalarm func(ns int64)) error {
 +	return ErrNotSuppoted
 +}
 diff --git a/src/embedded/rtos/syswriter.go b/src/embedded/rtos/syswriter.go
@@ -46249,10 +46240,10 @@ index 516045c163..a8dda030b9 100644
  import (
 diff --git a/src/runtime/const_noos_kendryte.go b/src/runtime/const_noos_kendryte.go
 new file mode 100644
-index 0000000000..c2a5af83ef
+index 0000000000..4f1d3b5811
 --- /dev/null
 +++ b/src/runtime/const_noos_kendryte.go
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,32 @@
 +// Copyright 2020 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -46272,7 +46263,6 @@ index 0000000000..c2a5af83ef
 +	noosLogHeapArenaBytes      = 17 // 128 KiB
 +	noosArenaBaseOffset        = 0x80000000
 +	noosMinPhysPageSize        = 256
-+	noosSpanSetBlockEntries    = 128
 +	noosSpanSetInitSpineCap    = 64
 +	noosStackMin               = 2048
 +	noosStackSystem            = 0
@@ -46288,10 +46278,10 @@ index 0000000000..c2a5af83ef
 +)
 diff --git a/src/runtime/const_noos_nrf52.go b/src/runtime/const_noos_nrf52.go
 new file mode 100644
-index 0000000000..385e3d0a97
+index 0000000000..bb4d5c92ca
 --- /dev/null
 +++ b/src/runtime/const_noos_nrf52.go
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,32 @@
 +// Copyright 2020 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -46311,7 +46301,6 @@ index 0000000000..385e3d0a97
 +	noosLogHeapArenaBytes      = 14 // 16 KiB
 +	noosArenaBaseOffset        = 0x20000000
 +	noosMinPhysPageSize        = 256
-+	noosSpanSetBlockEntries    = 16
 +	noosSpanSetInitSpineCap    = 8
 +	noosStackMin               = 1024
 +	noosStackSystem            = 27 * 4 // register stacking at exception entry
@@ -46327,10 +46316,10 @@ index 0000000000..385e3d0a97
 +)
 diff --git a/src/runtime/const_noos_stm32h7.go b/src/runtime/const_noos_stm32h7.go
 new file mode 100644
-index 0000000000..f322df61f5
+index 0000000000..85f785e655
 --- /dev/null
 +++ b/src/runtime/const_noos_stm32h7.go
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,32 @@
 +// Copyright 2020 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -46350,7 +46339,6 @@ index 0000000000..f322df61f5
 +	noosLogHeapArenaBytes      = 14         // 16 KiB
 +	noosArenaBaseOffset        = 0x24000000 // the begginning of AXI SRAM
 +	noosMinPhysPageSize        = 256
-+	noosSpanSetBlockEntries    = 16
 +	noosSpanSetInitSpineCap    = 8
 +	noosStackMin               = 1024
 +	noosStackSystem            = 27 * 4 // register stacking at exception entry
@@ -46366,10 +46354,10 @@ index 0000000000..f322df61f5
 +)
 diff --git a/src/runtime/const_noos_stm32x4.go b/src/runtime/const_noos_stm32x4.go
 new file mode 100644
-index 0000000000..9879aa6205
+index 0000000000..3cd1ab2cea
 --- /dev/null
 +++ b/src/runtime/const_noos_stm32x4.go
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,32 @@
 +// Copyright 2020 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -46389,7 +46377,6 @@ index 0000000000..9879aa6205
 +	noosLogHeapArenaBytes      = 14 // 16 KiB
 +	noosArenaBaseOffset        = 0x20000000
 +	noosMinPhysPageSize        = 256
-+	noosSpanSetBlockEntries    = 16
 +	noosSpanSetInitSpineCap    = 8
 +	noosStackMin               = 1024
 +	noosStackSystem            = 27 * 4 // register stacking at exception entry
@@ -46405,10 +46392,10 @@ index 0000000000..9879aa6205
 +)
 diff --git a/src/runtime/const_os.go b/src/runtime/const_os.go
 new file mode 100644
-index 0000000000..71b455df08
+index 0000000000..64ee3c95da
 --- /dev/null
 +++ b/src/runtime/const_os.go
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,31 @@
 +// Copyright 2020 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -46427,7 +46414,6 @@ index 0000000000..71b455df08
 +	noosLogHeapArenaBytes      = 0
 +	noosArenaBaseOffset        = 0
 +	noosMinPhysPageSize        = 0
-+	noosSpanSetBlockEntries    = 0
 +	noosSpanSetInitSpineCap    = 0
 +	noosStackMin               = 0
 +	noosStackSystem            = 0
@@ -49101,10 +49087,10 @@ index b3fac3de24..69c060f259 100644
  	)
 diff --git a/src/runtime/mem_noos.go b/src/runtime/mem_noos.go
 new file mode 100644
-index 0000000000..428a5692b5
+index 0000000000..757067c1d4
 --- /dev/null
 +++ b/src/runtime/mem_noos.go
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,129 @@
 +// Copyright 2018 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -49213,9 +49199,10 @@ index 0000000000..428a5692b5
 +		}
 +		unlock(&sysMem.mx)
 +	}
-+	if p != nil {
-+		mSysStatInc(sysStat, size)
++	if p == nil {
++		throw("runtime: cannot allocate memory")
 +	}
++	mSysStatInc(sysStat, size)
 +	return
 +}
 +
@@ -51434,7 +51421,7 @@ index 0000000000..2970ad52e1
 +}
 diff --git a/src/runtime/os_noos.go b/src/runtime/os_noos.go
 new file mode 100644
-index 0000000000..5cd6cc6335
+index 0000000000..e46ef2d719
 --- /dev/null
 +++ b/src/runtime/os_noos.go
 @@ -0,0 +1,138 @@
@@ -51493,7 +51480,7 @@ index 0000000000..5cd6cc6335
 +}
 +
 +//go:nosplit
-+func setsystim(nanotime func() int64, setalarm func(ns int64) bool) {
++func setsystim(nanotime func() int64, setalarm func(ns int64)) {
 +	if nanotime != nil {
 +		thetasker.newnanotime = nanotime
 +	} else {
@@ -51893,7 +51880,7 @@ index 0000000000..6cdeb88294
 +
 diff --git a/src/runtime/rt0_noos_riscv64.s b/src/runtime/rt0_noos_riscv64.s
 new file mode 100644
-index 0000000000..11abc6f5fe
+index 0000000000..a8c8ece6a3
 --- /dev/null
 +++ b/src/runtime/rt0_noos_riscv64.s
 @@ -0,0 +1,292 @@
@@ -51919,7 +51906,7 @@ index 0000000000..11abc6f5fe
 +
 +
 +#define handlerStackSize 4*1024 // size of stack usesd by trap handlers
-+#define persistAllocMin 64*1024
++#define persistAllocMin 128*1024
 +
 +#define intEnabled (MTI+MSI+SEI+MEI)
 +
@@ -53893,7 +53880,7 @@ index 0000000000..a8fb827805
 +#define SYS_NUM           14
 diff --git a/src/runtime/tasker_noos.go b/src/runtime/tasker_noos.go
 new file mode 100644
-index 0000000000..16d79bebb8
+index 0000000000..3c01f30eef
 --- /dev/null
 +++ b/src/runtime/tasker_noos.go
 @@ -0,0 +1,565 @@
@@ -53974,8 +53961,8 @@ index 0000000000..16d79bebb8
 +// Tasker code does not use FPU so the architecture specific context switch
 +// code can avoid saving/restoring FPU context if not need.
 +
-+func dummyNanotime() int64        { return 1 }
-+func dummySetalarm(ns int64) bool { return false }
++func dummyNanotime() int64   { return 1 }
++func dummySetalarm(ns int64) {}
 +
 +var thetasker = tasker{
 +	nanotime: dummyNanotime,
@@ -54013,12 +54000,12 @@ index 0000000000..16d79bebb8
 +	}
 +
 +	nanotime func() int64
-+	setalarm func(ns int64) bool
++	setalarm func(ns int64)
 +	write    func(fd int, p []byte) int
 +	writemx  cpumtx
 +
 +	newnanotime func() int64               // see embedded/rtos.SetSystemTimer
-+	newsetalarm func(ns int64) bool        // see embedded/rtos.SetSystemTimer
++	newsetalarm func(ns int64)             // see embedded/rtos.SetSystemTimer
 +	newwrite    func(fd int, p []byte) int // see embedded/rtos.SetSystemWriter
 +}
 +
@@ -54193,7 +54180,7 @@ index 0000000000..16d79bebb8
 +		}
 +
 +		// Nothing to execute. If this will be a work-stealing scheduler it will
-+		// try to steal some work from some other CPU here.
++		// try to steal some work from other CPU here.
 +		curcpuSleep()
 +	}
 +}
