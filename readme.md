@@ -6,9 +6,9 @@ Currently supported architectures:
 
 | GOOS/GOARCH  | Target                                       |
 | ------------ | ---------------------------------------------|
-| linux/thumb  | Linux on ARMv7-A (mainly for tests)          |
 | noos/thumb   | ARMv7-M microcontrollers (nFR52, STM32, ...) |
-| noos/riscv64 | RISCV64G SOCs (tested on Kendryte K210)      |
+| noos/riscv64 | RV64G SOCs (tested on Kendryte K210)         |
+| linux/thumb  | Linux on ARMv7-A (mainly for tests)          |
 
 #### How to install
 
@@ -29,7 +29,7 @@ git clone https://go.googlesource.com/go goroot
 ```
 cd goroot
 git checkout go1.15.3
-patch -p1 <../patch/go1.15.3-1
+patch -p1 <../patch/go1.15.3-2
 cd src
 ./all.bash
 ```
