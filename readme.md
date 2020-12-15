@@ -12,7 +12,7 @@ Currently supported architectures:
 
 #### How to install
 
-1. Download selected patch or the whole rpository:
+1. Download selected patch or the whole repository:
 
 ```
 git clone https://github.com/embeddedgo/patch
@@ -28,8 +28,8 @@ git clone https://go.googlesource.com/go goroot
 
 ```
 cd goroot
-git checkout go1.15.3
-patch -p1 <../patch/go1.15.3-2
+git checkout go1.15.6
+patch -p1 <../patch/go1.15.6
 cd src
 ./all.bash
 ```
