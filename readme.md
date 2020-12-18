@@ -8,7 +8,7 @@ Currently supported architectures:
 | ------------ | ---------------------------------------------|
 | noos/thumb   | ARMv7-M microcontrollers (nFR52, STM32, ...) |
 | noos/riscv64 | RV64G SOCs (tested on Kendryte K210)         |
-| linux/thumb  | Linux on ARMv7-A (mainly for tests)          |
+| linux/thumb  | Linux on ARMv7-A, Thumb2 ISA                 |
 
 #### How to install
 
@@ -29,7 +29,7 @@ git clone https://go.googlesource.com/go goroot
 ```
 cd goroot
 git checkout go1.15.6
-patch -p1 <../patch/go1.15.6
+patch -p1 <../patch/go1.15.6-1
 cd src
 ./all.bash
 ```
