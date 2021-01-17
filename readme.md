@@ -29,7 +29,7 @@ git clone https://go.googlesource.com/go goroot
 ```
 cd goroot
 git checkout go1.15.6
-patch -p1 <../patch/go1.15.6-3
+patch -p1 <../patch/go1.15.6-4
 cd src
 ./all.bash
 ```
