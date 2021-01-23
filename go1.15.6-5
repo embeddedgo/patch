@@ -53579,10 +53579,10 @@ index 0000000000..7326b8be34
 +	RET
 diff --git a/src/runtime/memmove_noos_riscv64.s b/src/runtime/memmove_noos_riscv64.s
 new file mode 100755
-index 0000000000..2fb51af442
+index 0000000000..ff388fc605
 --- /dev/null
 +++ b/src/runtime/memmove_noos_riscv64.s
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,105 @@
 +// Copyright 2016 The Go Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style
 +// license that can be found in the LICENSE file.
@@ -53603,41 +53603,17 @@ index 0000000000..2fb51af442
 +	OR   A0, A1, S0
 +	OR   A2, S0
 +	AND  $7, S0
++	AND  $3, S0, S1
++	AND  $1, S0, S2
 +
-+	// check the relative position of the to, from
++	// check the relative position of the to and from
 +	BLTU  A1, A0, backward
-+	ADD   A0, A2
 +
-+	BNE  S0, ZERO, forward4
-+forwardLoop8:
-+	BEQ  A0, A2, done
-+	MOV  (A1), S0
-+	ADD  $8, A1
-+	MOV  S0, (A0)
-+	ADD  $8, A0
-+	JMP  forwardLoop8
-+
-+forward4:
-+	AND  $3, S0
-+	BNE  S0, ZERO, forward2
-+forwardLoop4:
-+	BEQ    A0, A2, done
-+	MOVWU  (A1), S0
-+	ADD    $4, A1
-+	MOVW   S0, (A0)
-+	ADD    $4, A0
-+	JMP    forwardLoop4
-+
-+forward2:
-+	AND  $1, S0
-+	BNE  S0, ZERO, forwardLoop1
-+forwardLoop2:
-+	BEQ    A0, A2, done
-+	MOVHU  (A1), S0
-+	ADD    $2, A1
-+	MOVH   S0, (A0)
-+	ADD    $2, A0
-+	JMP    forwardLoop2
++forward:
++	ADD  A0, A2
++	BEQ  S0, ZERO, forwardLoop8
++	BEQ  S1, ZERO, forwardLoop4
++	BEQ  S2, ZERO, forwardLoop2
 +
 +forwardLoop1:
 +	BEQ    A0, A2, done
@@ -53647,40 +53623,36 @@ index 0000000000..2fb51af442
 +	ADD    $1, A0
 +	JMP    forwardLoop1
 +
++forwardLoop8:
++	BEQ  A0, A2, done
++	MOV  (A1), S0
++	ADD  $8, A1
++	MOV  S0, (A0)
++	ADD  $8, A0
++	JMP  forwardLoop8
++
++forwardLoop4:
++	BEQ    A0, A2, done
++	MOVWU  (A1), S0
++	ADD    $4, A1
++	MOVW   S0, (A0)
++	ADD    $4, A0
++	JMP    forwardLoop4
++
++forwardLoop2:
++	BEQ    A0, A2, done
++	MOVHU  (A1), S0
++	ADD    $2, A1
++	MOVH   S0, (A0)
++	ADD    $2, A0
++	JMP    forwardLoop2
++
 +backward:
 +	ADD  A2, A1
 +	ADD  A0, A2
-+
-+	BNE  S0, ZERO, backward4
-+backwardLoop8:
-+	BEQ  A0, A2, done
-+	ADD  $-8, A1
-+	MOV  (A1), S0
-+	ADD  $-8, A2
-+	MOV  S0, (A2)
-+	JMP  backwardLoop8
-+
-+backward4:
-+	AND  $3, S0
-+	BNE  S0, ZERO, backward2
-+backwardLoop4:
-+	BEQ    A0, A2, done
-+	ADD    $-4, A1
-+	MOVWU  (A1), S0
-+	ADD    $-4, A2
-+	MOVW   S0, (A2)
-+	JMP    backwardLoop4
-+
-+backward2:
-+	AND  $1, S0
-+	BNE  S0, ZERO, backwardLoop1
-+backwardLoop2:
-+	BEQ    A0, A2, done
-+	ADD    $-2, A1
-+	MOVHU  (A1), S0
-+	ADD    $-2, A2
-+	MOVH   S0, (A2)
-+	JMP    backwardLoop2
++	BEQ  S0, ZERO, backwardLoop8
++	BEQ  S1, ZERO, backwardLoop4
++	BEQ  S2, ZERO, backwardLoop2
 +
 +backwardLoop1:
 +	BEQ    A0, A2, done
@@ -53689,6 +53661,30 @@ index 0000000000..2fb51af442
 +	ADD    $-1, A2
 +	MOVB   S0, (A2)
 +	JMP    backwardLoop1
++
++backwardLoop8:
++	BEQ  A0, A2, done
++	ADD  $-8, A1
++	MOV  (A1), S0
++	ADD  $-8, A2
++	MOV  S0, (A2)
++	JMP  backwardLoop8
++
++backwardLoop4:
++	BEQ    A0, A2, done
++	ADD    $-4, A1
++	MOVWU  (A1), S0
++	ADD    $-4, A2
++	MOVW   S0, (A2)
++	JMP    backwardLoop4
++
++backwardLoop2:
++	BEQ    A0, A2, done
++	ADD    $-2, A1
++	MOVHU  (A1), S0
++	ADD    $-2, A2
++	MOVH   S0, (A2)
++	JMP    backwardLoop2
 +
 +done:
 +	RET
