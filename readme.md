@@ -10,6 +10,8 @@ Currently supported architectures:
 | noos/riscv64 | RV64G SOCs (tested on Kendryte K210)         |
 | linux/thumb  | Linux on ARMv7-A (Cortex-A), Thumb2 ISA      |
 
+For `GOARCH=thumb` you can set `GOARM=7` (default, soft float) or `GOARM=7d` (requires 64-bit FPU). `GOARM=7f` (32-bit FPU) is still unsupported.
+
 #### How to install
 
 1. Download selected patch or the whole repository:
@@ -28,8 +30,8 @@ git clone https://go.googlesource.com/go goroot
 
 ```
 cd goroot
-git checkout go1.15.8
-patch -p1 <../patch/go1.15.8
+git checkout go1.16.5
+patch -p1 <../patch/go1.16.5
 cd src
 ./all.bash
 ```
