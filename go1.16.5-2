@@ -33583,7 +33583,7 @@ index bfa8640ba9..16187f9de6 100644
  // This flood fill is wrapped in logic for pruning unused methods.
  // All methods are mentioned by relocations on their receiver's *rtype.
 diff --git a/src/cmd/link/internal/ld/dwarf.go b/src/cmd/link/internal/ld/dwarf.go
-index 2ab9a55e96..6a637a602f 100644
+index 2ab9a55e96..47bda0ed4d 100644
 --- a/src/cmd/link/internal/ld/dwarf.go
 +++ b/src/cmd/link/internal/ld/dwarf.go
 @@ -1171,7 +1171,17 @@ func expandFile(fname string) string {
@@ -33594,7 +33594,7 @@ index 2ab9a55e96..6a637a602f 100644
 +	fname = expandGoroot(fname)
 +	if *stripFuncNames > 0 {
 +		if *stripFuncNames == 1 {
-+			if i := strings.LastIndexByte(fname, '/'); i >= 0 {
++			if i := strings.LastIndex(fname, "/"); i >= 0 {
 +				fname = fname[i+1:]
 +			}
 +		} else {
