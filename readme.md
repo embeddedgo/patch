@@ -1,6 +1,7 @@
 This repository contains patches that can be used to add Embedded Go supported
-architectures to the [reference Go compiler](https://golang.org). The alternate
-way to try Embedded Go with last (unstable) changes is to clone https://github.com/embeddedgo/go repository.
+architectures to the [reference Go compiler](https://golang.org).
+
+The alternate way to try Embedded Go with the last (unstable) changes is to clone the https://github.com/embeddedgo/go repository.
 
 Currently supported architectures:
 
@@ -30,8 +31,8 @@ git clone https://go.googlesource.com/go goroot
 
 ```
 cd goroot
-git checkout go1.16.6
-patch -p1 <../patch/go1.16.6
+git checkout go1.16.8
+patch -p1 <../patch/go1.16.8
 cd src
 ./all.bash
 ```
