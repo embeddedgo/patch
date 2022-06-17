@@ -31,8 +31,8 @@ git clone https://go.googlesource.com/go goroot
 
 ```
 cd goroot
-git checkout go1.18.2
-patch -p1 <../patch/go1.18.2
+git checkout go1.18.3
+patch -p1 <../patch/go1.18.3
 cd src
 ./all.bash
 ```
