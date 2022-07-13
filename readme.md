@@ -1,6 +1,8 @@
 This repository contains patches that can be used to add Embedded Go supported
 architectures to the [reference Go compiler](https://golang.org).
 
+The main way to install Embedded Go is to use precompiled binary packages. See [https://embeddedgo.github.io/getting_started] for download links.
+
 The alternate way to try Embedded Go with the last (unstable) changes is to clone the https://github.com/embeddedgo/go repository.
 
 Currently supported architectures:
@@ -13,7 +15,7 @@ Currently supported architectures:
 
 For `GOARCH=thumb` you can set `GOARM=7` (default, soft float) or `GOARM=7d` (requires 64-bit FPU). `GOARM=7f` (32-bit FPU) is still unsupported.
 
-#### How to install
+#### How to install a patch
 
 1. Download selected patch or the whole repository:
 
@@ -31,10 +33,10 @@ git clone https://go.googlesource.com/go goroot
 
 ```
 cd goroot
-git checkout go1.18.3
-patch -p1 <../patch/go1.18.3-3
+git checkout go1.18.4
+patch -p1 <../patch/go1.18.4
 cd src
 ./all.bash
 ```
 
-4. See more info on https://golang.org/doc/install/source and https://embeddedgo.github.io/getting_started
+4. See more info on [https://embeddedgo.github.io/getting_started] and [https://golang.org/doc/install/source].
