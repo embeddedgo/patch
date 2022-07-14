@@ -39,4 +39,4 @@ cd src
 ./all.bash
 ```
 
-4. See more info on https://embeddedgo.github.io/getting_started and https://golang.org/doc/install/source.
+4. See more info on [embeddedgo.github.io/getting_started](https://embeddedgo.github.io/getting_started) and [golang.org/doc/install/source](https://golang.org/doc/install/source).
