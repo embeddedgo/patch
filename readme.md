@@ -1,5 +1,5 @@
 This repository contains patches that can be used to add Embedded Go supported
-architectures to the [reference Go compiler](https://golang.org).
+architectures to the [reference Go compiler](https://go.dev/).
 
 The main way to install Embedded Go is to use precompiled binary packages. See [https://embeddedgo.github.io/getting_started] for download links.
 
@@ -17,7 +17,7 @@ For `GOARCH=thumb` you can set `GOARM=7` (default, soft float) or `GOARM=7d` (re
 
 #### How to install a patch
 
-1. Download selected patch or the whole repository:
+1. Download the patch that matches your version of Go or the entire repository:
 
 ```
 git clone https://github.com/embeddedgo/patch
@@ -29,7 +29,7 @@ git clone https://github.com/embeddedgo/patch
 git clone https://go.googlesource.com/go goroot
 ```
 
-3. Apply patch and build the Go distribution:
+3. Apply a patch and build the Go distribution:
 
 ```
 cd goroot
