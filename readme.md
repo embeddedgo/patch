@@ -1,7 +1,7 @@
 This repository contains patches that can be used to add Embedded Go supported
 architectures to the [reference Go compiler](https://go.dev/).
 
-The main way to install Embedded Go is to use precompiled binary packages. See [https://embeddedgo.github.io/getting_started] for download links.
+The main way to install Embedded Go is to use precompiled binary packages. See (embeddedgo.github.io/getting_started)[https://embeddedgo.github.io/getting_started] for download links.
 
 The alternate way to try Embedded Go with the last (unstable) changes is to clone the https://github.com/embeddedgo/go repository.
 
@@ -39,4 +39,4 @@ cd src
 ./all.bash
 ```
 
-4. See more info on [https://embeddedgo.github.io/getting_started] and [https://golang.org/doc/install/source].
+4. See more info on https://embeddedgo.github.io/getting_started and https://golang.org/doc/install/source.
