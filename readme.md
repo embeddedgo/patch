@@ -1,9 +1,9 @@
 This repository contains patches that can be used to add Embedded Go supported
 architectures to the [reference Go compiler](https://go.dev/).
 
-The main way to install Embedded Go is to use precompiled binary packages. See (embeddedgo.github.io/getting_started)[https://embeddedgo.github.io/getting_started] for download links.
+The main way to install Embedded Go is to use precompiled binary packages. See [embeddedgo.github.io/getting_started](https://embeddedgo.github.io/getting_started) for download links.
 
-The alternate way to try Embedded Go with the last (unstable) changes is to clone the https://github.com/embeddedgo/go repository.
+The alternate way to try Embedded Go with the last (unstable) changes is to clone the [github.com/embeddedgo/go](https://github.com/embeddedgo/go) repository.
 
 Currently supported architectures:
 
