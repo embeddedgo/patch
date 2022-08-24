@@ -1,54 +1,110 @@
 diff --git a/api/go1embedded.txt b/api/go1embedded.txt
 new file mode 100644
-index 0000000000..780735995f
+index 0000000000..d858c7dcc3
 --- /dev/null
 +++ b/api/go1embedded.txt
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,191 @@
 +pkg embedded/mmio, func MB()
++pkg embedded/mmio, method (*P32) Addr() uintptr
++pkg embedded/mmio, method (*P32) Load() uintptr
++pkg embedded/mmio, method (*P32) Store(unsafe.Pointer)
++pkg embedded/mmio, method (*P64) Addr() uintptr
++pkg embedded/mmio, method (*P64) Load() uintptr
++pkg embedded/mmio, method (*P64) Store(unsafe.Pointer)
++pkg embedded/mmio, method (*R16[$0]) Addr() uintptr
++pkg embedded/mmio, method (*R16[$0]) ClearBits($0)
++pkg embedded/mmio, method (*R16[$0]) Load() $0
++pkg embedded/mmio, method (*R16[$0]) LoadBits($0) $0
++pkg embedded/mmio, method (*R16[$0]) SetBits($0)
++pkg embedded/mmio, method (*R16[$0]) Store($0)
++pkg embedded/mmio, method (*R16[$0]) StoreBits($0, $0)
++pkg embedded/mmio, method (*R32[$0]) Addr() uintptr
++pkg embedded/mmio, method (*R32[$0]) ClearBits($0)
++pkg embedded/mmio, method (*R32[$0]) Load() $0
++pkg embedded/mmio, method (*R32[$0]) LoadBits($0) $0
++pkg embedded/mmio, method (*R32[$0]) SetBits($0)
++pkg embedded/mmio, method (*R32[$0]) Store($0)
++pkg embedded/mmio, method (*R32[$0]) StoreBits($0, $0)
++pkg embedded/mmio, method (*R64[$0]) Addr() uintptr
++pkg embedded/mmio, method (*R64[$0]) ClearBits($0)
++pkg embedded/mmio, method (*R64[$0]) Load() $0
++pkg embedded/mmio, method (*R64[$0]) LoadBits($0) $0
++pkg embedded/mmio, method (*R64[$0]) SetBits($0)
++pkg embedded/mmio, method (*R64[$0]) Store($0)
++pkg embedded/mmio, method (*R64[$0]) StoreBits($0, $0)
++pkg embedded/mmio, method (*R8[$0]) Addr() uintptr
++pkg embedded/mmio, method (*R8[$0]) ClearBits($0)
++pkg embedded/mmio, method (*R8[$0]) Load() $0
++pkg embedded/mmio, method (*R8[$0]) LoadBits($0) $0
++pkg embedded/mmio, method (*R8[$0]) SetBits($0)
++pkg embedded/mmio, method (*R8[$0]) Store($0)
++pkg embedded/mmio, method (*R8[$0]) StoreBits($0, $0)
 +pkg embedded/mmio, method (*U16) Addr() uintptr
-+pkg embedded/mmio, method (*U16) LoadBit(int) int
 +pkg embedded/mmio, method (*U16) LoadBits(uint16) uint16
-+pkg embedded/mmio, method (*U16) ClearBit(int)
 +pkg embedded/mmio, method (*U16) ClearBits(uint16)
 +pkg embedded/mmio, method (*U16) Load() uint16
-+pkg embedded/mmio, method (*U16) SetBit(int)
 +pkg embedded/mmio, method (*U16) SetBits(uint16)
 +pkg embedded/mmio, method (*U16) Store(uint16)
-+pkg embedded/mmio, method (*U16) StoreBit(int, int)
 +pkg embedded/mmio, method (*U16) StoreBits(uint16, uint16)
 +pkg embedded/mmio, method (*U32) Addr() uintptr
-+pkg embedded/mmio, method (*U32) LoadBit(int) int
 +pkg embedded/mmio, method (*U32) LoadBits(uint32) uint32
-+pkg embedded/mmio, method (*U32) ClearBit(int)
 +pkg embedded/mmio, method (*U32) ClearBits(uint32)
 +pkg embedded/mmio, method (*U32) Load() uint32
-+pkg embedded/mmio, method (*U32) SetBit(int)
 +pkg embedded/mmio, method (*U32) SetBits(uint32)
 +pkg embedded/mmio, method (*U32) Store(uint32)
-+pkg embedded/mmio, method (*U32) StoreBit(int, int)
 +pkg embedded/mmio, method (*U32) StoreBits(uint32, uint32)
 +pkg embedded/mmio, method (*U64) Addr() uintptr
-+pkg embedded/mmio, method (*U64) ClearBit(int)
 +pkg embedded/mmio, method (*U64) ClearBits(uint64)
 +pkg embedded/mmio, method (*U64) Load() uint64
-+pkg embedded/mmio, method (*U64) LoadBit(int) int
 +pkg embedded/mmio, method (*U64) LoadBits(uint64) uint64
-+pkg embedded/mmio, method (*U64) SetBit(int)
 +pkg embedded/mmio, method (*U64) SetBits(uint64)
 +pkg embedded/mmio, method (*U64) Store(uint64)
-+pkg embedded/mmio, method (*U64) StoreBit(int, int)
 +pkg embedded/mmio, method (*U64) StoreBits(uint64, uint64)
 +pkg embedded/mmio, method (*U8) Addr() uintptr
-+pkg embedded/mmio, method (*U8) LoadBit(int) int
 +pkg embedded/mmio, method (*U8) LoadBits(uint8) uint8
-+pkg embedded/mmio, method (*U8) ClearBit(int)
 +pkg embedded/mmio, method (*U8) ClearBits(uint8)
 +pkg embedded/mmio, method (*U8) Load() uint8
-+pkg embedded/mmio, method (*U8) SetBit(int)
 +pkg embedded/mmio, method (*U8) SetBits(uint8)
 +pkg embedded/mmio, method (*U8) Store(uint8)
-+pkg embedded/mmio, method (*U8) StoreBit(int, int)
 +pkg embedded/mmio, method (*U8) StoreBits(uint8, uint8)
++pkg embedded/mmio, method (RM16[$0]) Clear()
++pkg embedded/mmio, method (RM16[$0]) Load() $0
++pkg embedded/mmio, method (RM16[$0]) Set()
++pkg embedded/mmio, method (RM16[$0]) Store($0)
++pkg embedded/mmio, method (RM32[$0]) Clear()
++pkg embedded/mmio, method (RM32[$0]) Load() $0
++pkg embedded/mmio, method (RM32[$0]) Set()
++pkg embedded/mmio, method (RM32[$0]) Store($0)
++pkg embedded/mmio, method (RM64[$0]) Clear()
++pkg embedded/mmio, method (RM64[$0]) Load() $0
++pkg embedded/mmio, method (RM64[$0]) Set()
++pkg embedded/mmio, method (RM64[$0]) Store($0)
++pkg embedded/mmio, method (RM8[$0]) Clear()
++pkg embedded/mmio, method (RM8[$0]) Load() $0
++pkg embedded/mmio, method (RM8[$0]) Set()
++pkg embedded/mmio, method (RM8[$0]) Store($0)
++pkg embedded/mmio, type P32 struct
++pkg embedded/mmio, type P64 struct
++pkg embedded/mmio, type R16[$0 T16] struct
++pkg embedded/mmio, type R32[$0 T32] struct
++pkg embedded/mmio, type R64[$0 T64] struct
++pkg embedded/mmio, type R8[$0 T8] struct
++pkg embedded/mmio, type RM16[$0 T16] struct
++pkg embedded/mmio, type RM16[$0 T16] struct, Mask $0
++pkg embedded/mmio, type RM16[$0 T16] struct, R *R16
++pkg embedded/mmio, type RM32[$0 T32] struct
++pkg embedded/mmio, type RM32[$0 T32] struct, Mask $0
++pkg embedded/mmio, type RM32[$0 T32] struct, R *R32
++pkg embedded/mmio, type RM64[$0 T64] struct
++pkg embedded/mmio, type RM64[$0 T64] struct, Mask $0
++pkg embedded/mmio, type RM64[$0 T64] struct, R *R64
++pkg embedded/mmio, type RM8[$0 T8] struct
++pkg embedded/mmio, type RM8[$0 T8] struct, Mask $0
++pkg embedded/mmio, type RM8[$0 T8] struct, R *R8
++pkg embedded/mmio, type T16 interface {}
++pkg embedded/mmio, type T32 interface {}
++pkg embedded/mmio, type T64 interface {}
++pkg embedded/mmio, type T8 interface {}
 +pkg embedded/mmio, method (UM16) Clear()
 +pkg embedded/mmio, method (UM16) Load() uint16
 +pkg embedded/mmio, method (UM16) Set()
@@ -81,6 +137,12 @@ index 0000000000..780735995f
 +pkg embedded/mmio, type UM8 struct
 +pkg embedded/mmio, type UM8 struct, Mask uint8
 +pkg embedded/mmio, type UM8 struct, R *U8
++pkg embedded/rtos, const DCacheClean = 1
++pkg embedded/rtos, const DCacheClean ideal-int
++pkg embedded/rtos, const DCacheCleanInval = 2
++pkg embedded/rtos, const DCacheCleanInval ideal-int
++pkg embedded/rtos, const DCacheInval = 0
++pkg embedded/rtos, const DCacheInval ideal-int
 +pkg embedded/rtos, const IntPrioCurrent = -1
 +pkg embedded/rtos, const IntPrioCurrent ideal-int
 +pkg embedded/rtos, const IntPrioHigh = 0
@@ -97,6 +159,7 @@ index 0000000000..780735995f
 +pkg embedded/rtos, const IntPrioSysCall ideal-int
 +pkg embedded/rtos, const IntPrioSysTimer = 0
 +pkg embedded/rtos, const IntPrioSysTimer ideal-int
++pkg embedded/rtos, func CacheMaint(int, unsafe.Pointer, int)
 +pkg embedded/rtos, func HandlerMode() bool
 +pkg embedded/rtos, func Nanotime() time.Duration
 +pkg embedded/rtos, func SetPrivLevel(int) (int, error)
@@ -117,7 +180,7 @@ index 0000000000..780735995f
 +pkg embedded/rtos, var ErrBadIntPrio *Error
 +pkg embedded/rtos, var ErrBadPrivLevel *Error
 +pkg embedded/rtos, var ErrInsufPrivLevel *Error
-+pkg embedded/rtos, var ErrNotSuppoted *Error
++pkg embedded/rtos, var ErrNotSupported *Error
 +pkg embedded/rtos, var ErrBadIntCtx *Error
 +pkg embedded/rtos, var ErrUknown *Error
 +pkg embedded/rtos, func Mount(FS, string) error
@@ -41931,7 +41994,7 @@ index 0000000000..35583e737c
 +func cacheMaint(op int, p unsafe.Pointer, size int)
 diff --git a/src/embedded/rtos/cachemaint_x.go b/src/embedded/rtos/cachemaint_x.go
 new file mode 100644
-index 0000000000..f7386a7f93
+index 0000000000..24c4559639
 --- /dev/null
 +++ b/src/embedded/rtos/cachemaint_x.go
 @@ -0,0 +1,13 @@
@@ -41946,11 +42009,11 @@ index 0000000000..f7386a7f93
 +import "unsafe"
 +
 +func cacheMaint(op int, p unsafe.Pointer, size int) {
-+	return -1, ErrNotSuppoted
++	panic(ErrNotSupported)
 +}
 diff --git a/src/embedded/rtos/errors.go b/src/embedded/rtos/errors.go
 new file mode 100644
-index 0000000000..da45f6899a
+index 0000000000..adeb4762a4
 --- /dev/null
 +++ b/src/embedded/rtos/errors.go
 @@ -0,0 +1,19 @@
@@ -41966,7 +42029,7 @@ index 0000000000..da45f6899a
 +
 +var (
 +	ErrUknown         = &Error{"rtos: unknown error"}
-+	ErrNotSuppoted    = &Error{"rtos: operation not supported"}
++	ErrNotSupported   = &Error{"rtos: operation not supported"}
 +	ErrBadPrivLevel   = &Error{"rtos: bad privilege level"}
 +	ErrInsufPrivLevel = &Error{"rtos: insufficient privilege level"}
 +	ErrBadIntNumber   = &Error{"rtos: bad interrupt number"}
@@ -41975,7 +42038,7 @@ index 0000000000..da45f6899a
 +)
 diff --git a/src/embedded/rtos/errors_noos.go b/src/embedded/rtos/errors_noos.go
 new file mode 100644
-index 0000000000..45b39532be
+index 0000000000..93a1cb81ea
 --- /dev/null
 +++ b/src/embedded/rtos/errors_noos.go
 @@ -0,0 +1,25 @@
@@ -41987,7 +42050,7 @@ index 0000000000..45b39532be
 +
 +var errorsByNumber = [...]*Error{
 +	0: ErrUknown,
-+	1: ErrNotSuppoted,
++	1: ErrNotSupported,
 +	2: ErrBadPrivLevel,
 +	3: ErrInsufPrivLevel,
 +	4: ErrBadIntNumber,
@@ -42171,7 +42234,7 @@ index 0000000000..7c56432c9b
 +)
 diff --git a/src/embedded/rtos/irq_x.go b/src/embedded/rtos/irq_x.go
 new file mode 100644
-index 0000000000..0668860a22
+index 0000000000..5c27fa8db5
 --- /dev/null
 +++ b/src/embedded/rtos/irq_x.go
 @@ -0,0 +1,38 @@
@@ -42199,15 +42262,15 @@ index 0000000000..0668860a22
 +type intCtx int
 +
 +func irqEnable(irq IRQ, prio int, ctx IntCtx) error {
-+	return ErrNotSuppoted
++	return ErrNotSupported
 +}
 +
 +func irqDisable(irq IRQ, ctx IntCtx) error {
-+	return ErrNotSuppoted
++	return ErrNotSupported
 +}
 +
 +func irqStatus(irq IRQ, ctx IntCtx) (enabled bool, prio int, err error) {
-+	return false, 0, ErrNotSuppoted
++	return false, 0, ErrNotSupported
 +}
 +
 +func handlerMode() bool {
@@ -42377,7 +42440,7 @@ index 0000000000..08dd721f98
 +func runtime_setprivlevel(newlevel int) (oldlevel, errno int)
 diff --git a/src/embedded/rtos/privlevel_x.go b/src/embedded/rtos/privlevel_x.go
 new file mode 100644
-index 0000000000..2b03a6b291
+index 0000000000..44eb7b1d93
 --- /dev/null
 +++ b/src/embedded/rtos/privlevel_x.go
 @@ -0,0 +1,11 @@
@@ -42390,7 +42453,7 @@ index 0000000000..2b03a6b291
 +package rtos
 +
 +func setPrivLevel(newlevel int) (oldlevel int, err error) {
-+	return -1, ErrNotSuppoted
++	return -1, ErrNotSupported
 +}
 diff --git a/src/embedded/rtos/systim.go b/src/embedded/rtos/systim.go
 new file mode 100644
@@ -42465,7 +42528,7 @@ index 0000000000..e45f8ba9d1
 +
 diff --git a/src/embedded/rtos/systim_x.go b/src/embedded/rtos/systim_x.go
 new file mode 100644
-index 0000000000..13abaa4584
+index 0000000000..87109d3461
 --- /dev/null
 +++ b/src/embedded/rtos/systim_x.go
 @@ -0,0 +1,11 @@
@@ -42478,7 +42541,7 @@ index 0000000000..13abaa4584
 +package rtos
 +
 +func setSystemTimer(nanotime func() int64, setalarm func(ns int64)) error {
-+	return ErrNotSuppoted
++	return ErrNotSupported
 +}
 diff --git a/src/embedded/rtos/syswriter.go b/src/embedded/rtos/syswriter.go
 new file mode 100644
@@ -42525,7 +42588,7 @@ index 0000000000..1ddd5a921f
 +func runtime_setsyswriter(w func(fd int, p []byte) int)
 diff --git a/src/embedded/rtos/syswriter_x.go b/src/embedded/rtos/syswriter_x.go
 new file mode 100644
-index 0000000000..7f6a6ff454
+index 0000000000..fcaedf12c5
 --- /dev/null
 +++ b/src/embedded/rtos/syswriter_x.go
 @@ -0,0 +1,11 @@
@@ -42538,7 +42601,7 @@ index 0000000000..7f6a6ff454
 +package rtos
 +
 +func setSysWriter(w func(fd int, p []byte) int) error {
-+	return ErrNotSuppoted
++	return ErrNotSupported
 +}
 diff --git a/src/embedded/rtos/utils.go b/src/embedded/rtos/utils.go
 new file mode 100644
