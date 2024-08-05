@@ -7,13 +7,13 @@ The alternate way to try Embedded Go with the last (unstable) changes is to clon
 
 Currently supported architectures:
 
-| GOOS/GOARCH  | Target                                       |
-| ------------ | -------------------------------------------- |
-| noos/thumb   | ARMv7-M microcontrollers (nFR52, STM32, ...) |
-| noos/riscv64 | RV64G SOCs (tested on Kendryte K210)         |
-| linux/thumb  | Linux on ARMv7-A (Cortex-A), Thumb2 ISA      |
+| GOOS/GOARCH  | Target                                                |
+| ------------ | ----------------------------------------------------- |
+| noos/thumb   | ARMv7-M microcontrollers (i.MX RT, nFR52, STM32, ...) |
+| noos/riscv64 | RV64G SOCs (tested on Kendryte K210)                  |
+| linux/thumb  | Linux on ARMv7-A (Cortex-A), Thumb2 ISA               |
 
-For `GOARCH=thumb` you can set `GOARM=7` (default, soft float) or `GOARM=7d` (requires 64-bit FPU). `GOARM=7f` (32-bit FPU) is still unsupported.
+For `GOARCH=thumb` you can set `GOARM=7` (default, hard float, requires 64-bit FPU) or `GOARM=7,softfoat` (no FPU or 32-bit FPU). The [emgo](https://github.com/embeddedgo/tools) tool infers a correct `GOARM` value for `GOTARGET` and has more useful feutures so use it instead of the raw go tool.
 
 #### How to install a patch
 
@@ -33,8 +33,8 @@ git clone https://go.googlesource.com/go goroot
 
 ```
 cd goroot
-git checkout go1.20.12
-patch -p1 <../patch/go1.20.12
+git checkout go1.22.5
+patch -p1 <../patch/go1.22.5
 cd src
 ./all.bash
 ```
